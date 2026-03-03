@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useData } from "../context/DataContext";
+import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
-import { brl, pct, MS, cn } from "../lib/utils";
+import { brl, pct, MS, MF, cn } from "../lib/utils";
 import {
   Users,
   GraduationCap,
@@ -21,10 +22,12 @@ import {
   ChevronRight,
   X,
   Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 
 export const Professors = () => {
-  const { data, curMo, selProf, setSelProf, selPay, setSelPay, dark, viewKpis, handleAddProfessor, handleDeleteProfessor, handleAddStudent, handleDeleteStudent, handleUpdatePayment } = useData();
+  const { data, curMo, setCurMo, selProf, setSelProf, selPay, setSelPay, dark, viewKpis, handleAddProfessor, handleDeleteProfessor, handleAddStudent, handleDeleteStudent, handleUpdatePayment } = useData();
   const [showAddProf, setShowAddProf] = useState(false);
   const [showAddStud, setShowAddStud] = useState<string | null>(null);
   const [npName, setNpName] = useState("");
@@ -114,21 +117,18 @@ export const Professors = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {/* Header com seletor de meses */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Professores</h1>
           <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
-            {data.professors.length} profs · {data.professors.reduce((s, p) => s + p.students.length, 0)} alunos
+            {data.professors.length} profs · {data.professors.reduce((s, p) => s + p.students.length, 0)} alunos · {MF[curMo]}
           </p>
         </div>
-        <button
-          onClick={() => setShowAddProf(true)}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg shadow-violet-500/25 hover:shadow-xl transition-all border-none cursor-pointer"
-        >
-          <Plus size={14} /> Novo Professor
-        </button>
+        <MonthSelector curMo={curMo} setCurMo={setCurMo} />
       </div>
 
+      {/* KPIs principais */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
         <KpiCard icon={Users} label="Professores" value={_tP} color="purple" />
         <KpiCard icon={GraduationCap} label="Alunos" value={_tA} color="blue" />
@@ -136,9 +136,11 @@ export const Professors = () => {
         <KpiCard icon={DollarSign} label={`Receita ${MS[curMo]}`} value={brl(_tR)} color="green" />
         <KpiCard icon={Wallet} label="Folha Prof." value={brl(_tF)} color="red" />
         <KpiCard icon={Target} label="% Folha/Fat." value={pct(_pF)} color={_pF > 0.45 ? "red" : "green"} />
-        <KpiCard icon={BarChart} label="Ticket Medio" value={brl(_tk)} color="teal" />
+        <KpiCard icon={BarChart} label="Ticket Médio" value={brl(_tk)} color="teal" />
         <KpiCard icon={Activity} label="Media Al/Prof" value={_ma.toFixed(1)} color="blue" />
       </div>
+
+      {/* KPIs extras Fase 3 */}
       <div className="grid grid-cols-3 gap-2">
         <KpiCard icon={Clock} label="Permanência" value={avgTenure.toFixed(1) + " meses"} color="cyan" />
         <KpiCard icon={UserPlus} label={`Matrículas ${MS[curMo]}`} value={newEnrollments} color="teal" />
@@ -146,11 +148,22 @@ export const Professors = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Lista de professores com trends */}
         <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
           {data.professors.map((p) => {
             const pay = p.students.filter((s) => s.payments && s.payments[curMo] && s.payments[curMo]! > 0).length;
             const rev = p.students.reduce((sum, s) => sum + ((s.payments && s.payments[curMo]) || 0), 0);
             const pp = rev > 0 ? (pay * p.costPerStudent) / rev : 0;
+            const ticketProf = pay > 0 ? rev / pay : 0;
+
+            // Calcular receita do mês anterior para trend
+            const prevRev = curMo > 0
+              ? p.students.reduce((sum, s) => sum + ((s.payments && s.payments[curMo - 1]) || 0), 0)
+              : null;
+            const trendProf = prevRev != null && prevRev > 0
+              ? ((rev - prevRev) / prevRev) * 100
+              : null;
+            const trendUp = trendProf != null && trendProf >= 0;
 
             return (
               <div
@@ -192,7 +205,20 @@ export const Professors = () => {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={cn("text-xs font-bold", dark ? "text-emerald-400" : "text-emerald-600")}>{brl(rev)}</p>
+                    <div className="flex items-center gap-1 justify-end">
+                      <p className={cn("text-xs font-bold", dark ? "text-emerald-400" : "text-emerald-600")}>{brl(rev)}</p>
+                      {trendProf != null && (
+                        <span className={cn(
+                          "text-[9px] flex items-center",
+                          trendUp
+                            ? (dark ? "text-emerald-400" : "text-emerald-600")
+                            : (dark ? "text-rose-400" : "text-rose-600")
+                        )}>
+                          {trendUp ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                          {Math.abs(trendProf).toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
                     <p
                       className={cn(
                         "text-[10px]",
@@ -200,6 +226,9 @@ export const Professors = () => {
                       )}
                     >
                       {pct(pp)} folha
+                    </p>
+                    <p className={cn("text-[9px]", dark ? "text-teal-400" : "text-teal-600")}>
+                      Ticket: {brl(ticketProf)}
                     </p>
                   </div>
                 </div>
@@ -226,6 +255,16 @@ export const Professors = () => {
                     <p className={cn("text-[10px] font-semibold", dark ? "text-emerald-400" : "text-emerald-600")}>
                       Receita {MS[curMo]}:{" "}
                       {brl(prof.students.reduce((sum, s) => sum + ((s.payments && s.payments[curMo]) || 0), 0))}
+                      <span className={cn("ml-2", dark ? "text-teal-400" : "text-teal-600")}>
+                        Ticket:{" "}
+                        {brl(
+                          (() => {
+                            const payProf = prof.students.filter((s) => s.payments && s.payments[curMo] && s.payments[curMo]! > 0).length;
+                            const revProf = prof.students.reduce((sum, s) => sum + ((s.payments && s.payments[curMo]) || 0), 0);
+                            return payProf > 0 ? revProf / payProf : 0;
+                          })()
+                        )}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -345,7 +384,8 @@ export const Professors = () => {
                                           <label
                                             className={cn(
                                               "text-[9px] font-semibold",
-                                              dark ? "text-slate-400" : "text-slate-500"
+                                              dark ? "text-slate-400" : "text-slate-500",
+                                              mi === curMo && (dark ? "text-violet-400" : "text-violet-600")
                                             )}
                                           >
                                             {m}
@@ -366,7 +406,8 @@ export const Professors = () => {
                                                   : "bg-rose-50 border-rose-300 text-rose-600"
                                                 : dark
                                                 ? "bg-slate-600 border-slate-500 text-white"
-                                                : "bg-white border-slate-200 text-slate-800"
+                                                : "bg-white border-slate-200 text-slate-800",
+                                              mi === curMo && (dark ? "ring-1 ring-violet-500/50" : "ring-1 ring-violet-400")
                                             )}
                                             placeholder="—"
                                           />

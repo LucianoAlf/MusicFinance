@@ -1,7 +1,8 @@
 import React from "react";
 import { useData } from "../context/DataContext";
+import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
-import { brl, pct, MS, cn } from "../lib/utils";
+import { brl, pct, MS, MF, cn } from "../lib/utils";
 import {
   DollarSign,
   Wallet,
@@ -15,6 +16,7 @@ import {
   Clock,
   Crosshair,
   Users,
+  Calendar,
 } from "lucide-react";
 import {
   LineChart,
@@ -30,15 +32,18 @@ import {
   BarChart as RechartsBarChart,
   Bar,
   Legend,
+  ReferenceLine,
 } from "recharts";
 
 export const Dashboard = () => {
-  const { data, calcMo, curMo, dark, viewKpis } = useData();
+  const { data, calcMo, curMo, setCurMo, dark, viewKpis } = useData();
   if (!data) return null;
 
   const md = Array.from({ length: 12 }, (_, i) => calcMo(i));
   const tR = md.reduce((a, d) => a + d.revenue, 0);
   const tE = md.reduce((a, d) => a + d.expenses, 0);
+  const tProfit = tR - tE;
+  const tMargin = tR > 0 ? tProfit / tR : 0;
 
   const cur = md[curMo];
   const prev = curMo > 0 ? md[curMo - 1] : null;
@@ -58,8 +63,6 @@ export const Dashboard = () => {
   const activeStudents = kpiMes?.activeStudents ?? 0;
   const avgTenure = viewKpis?.avgTenureMonths ?? 0;
   const breakevenRevenue = beMes?.breakevenRevenue;
-
-  const avgM = tR > 0 ? (tR - tE) / tR : 0;
 
   const ccT = (data.expenses || []).map((cc) => {
     let t = 0;
@@ -81,30 +84,36 @@ export const Dashboard = () => {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Dashboard</h1>
-        <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
-          {data.config.schoolName} — {data.config.year}
-        </p>
+      {/* Header com seletor de meses */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Dashboard</h1>
+          <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
+            {data.config.schoolName} — {data.config.year}
+          </p>
+        </div>
+        <MonthSelector curMo={curMo} setCurMo={setCurMo} />
       </div>
 
+      {/* Seção FINANCEIRO — Mês Selecionado */}
       <div>
         <p className={cn("text-[10px] font-semibold mb-2 uppercase tracking-wider", dark ? "text-slate-500" : "text-slate-400")}>
-          Financeiro
+          Financeiro — {MF[curMo]}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard icon={DollarSign} label="Receita Anual" value={brl(tR)} color="green" trend={trend(cur.revenue, prev?.revenue)} />
-          <KpiCard icon={Wallet} label="Despesas" value={brl(tE)} color="red" />
-          <KpiCard icon={PiggyBank} label="Lucro" value={brl(tR - tE)} color={tR - tE >= 0 ? "green" : "red"} trend={trend(cur.profit, prev?.profit)} />
-          <KpiCard icon={Target} label="Margem" value={pct(avgM)} color="purple" />
-          <KpiCard icon={BarChart} label="Ticket" value={brl(cur.ticket)} color="teal" sub={`Custo ${brl(cur.costPerStudent)}`} />
-          <KpiCard icon={Crosshair} label="Ponto Equil." value={breakevenRevenue != null ? brl(breakevenRevenue) : "—"} color="orange" />
+          <KpiCard icon={DollarSign} label="Receita" value={brl(cur.revenue)} color="green" trend={trend(cur.revenue, prev?.revenue)} />
+          <KpiCard icon={Wallet} label="Despesas" value={brl(cur.expenses)} color="red" trend={trend(cur.expenses, prev?.expenses)} />
+          <KpiCard icon={PiggyBank} label="Resultado" value={brl(cur.profit)} color={cur.profit >= 0 ? "green" : "red"} trend={trend(cur.profit, prev?.profit)} />
+          <KpiCard icon={Target} label="Margem" value={pct(cur.margin)} color="purple" />
+          <KpiCard icon={BarChart} label="Ticket Médio" value={brl(cur.ticket)} color="teal" sub={`Custo ${brl(cur.costPerStudent)}`} />
+          <KpiCard icon={Crosshair} label="Ponto de Equilíbrio" value={breakevenRevenue != null ? brl(breakevenRevenue) : "—"} color="orange" />
         </div>
       </div>
 
+      {/* Seção ALUNOS — Mês Selecionado */}
       <div>
         <p className={cn("text-[10px] font-semibold mb-2 uppercase tracking-wider", dark ? "text-slate-500" : "text-slate-400")}>
-          Alunos — {MS[curMo]}
+          Alunos — {MF[curMo]}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard icon={Users} label="Ativos" value={activeStudents} color="blue" />
@@ -112,10 +121,41 @@ export const Dashboard = () => {
           <KpiCard icon={UserPlus} label="Matrículas" value={newEnrollments} color="teal" trend={trend(newEnrollments, kpiPrev?.newEnrollments ?? null)} />
           <KpiCard icon={UserMinus} label="Evasões" value={churnedStudents} color="red" trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
           <KpiCard icon={TrendingDown} label="Churn Rate" value={churnRate.toFixed(1) + "%"} color="rose" trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
-          <KpiCard icon={Clock} label="Permanência" value={avgTenure.toFixed(1) + " m"} color="cyan" />
+          <KpiCard icon={Clock} label="Permanência Média" value={avgTenure.toFixed(1) + " m"} color="cyan" />
         </div>
       </div>
 
+      {/* Seção ACUMULADO ANUAL — Card compacto */}
+      <div className={cn("rounded-xl p-4 border", dark ? "bg-slate-800/60 border-slate-700/50" : "bg-slate-50 border-slate-200")}>
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar size={14} className={dark ? "text-slate-400" : "text-slate-500"} />
+          <p className={cn("text-[11px] font-semibold uppercase tracking-wider", dark ? "text-slate-400" : "text-slate-500")}>
+            Acumulado Anual
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Receita</p>
+            <p className={cn("text-lg font-bold", dark ? "text-emerald-400" : "text-emerald-600")}>{brl(tR)}</p>
+          </div>
+          <div>
+            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Despesas</p>
+            <p className={cn("text-lg font-bold", dark ? "text-rose-400" : "text-rose-600")}>{brl(tE)}</p>
+          </div>
+          <div>
+            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Resultado</p>
+            <p className={cn("text-lg font-bold", tProfit >= 0 ? (dark ? "text-emerald-400" : "text-emerald-600") : (dark ? "text-rose-400" : "text-rose-600"))}>
+              {brl(tProfit)}
+            </p>
+          </div>
+          <div>
+            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Margem</p>
+            <p className={cn("text-lg font-bold", dark ? "text-violet-400" : "text-violet-600")}>{pct(tMargin)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className={cn("lg:col-span-2", cd)}>
           <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
@@ -132,6 +172,7 @@ export const Dashboard = () => {
                   formatter={(value: number) => brl(value)}
                 />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: "11px" }} />
+                <ReferenceLine x={MS[curMo]} stroke={dark ? "#94a3b8" : "#64748b"} strokeDasharray="3 3" />
                 <Line type="monotone" dataKey="revenue" name="Receita" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                 <Line type="monotone" dataKey="expenses" name="Despesa" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                 <Line type="monotone" dataKey="profit" name="Resultado" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
@@ -180,7 +221,12 @@ export const Dashboard = () => {
                 />
                 <Bar dataKey="margin" radius={[4, 4, 4, 4]}>
                   {md.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.margin >= 0 ? "rgba(16,185,129,0.7)" : "rgba(239,68,68,0.7)"} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.margin >= 0 ? "rgba(16,185,129,0.7)" : "rgba(239,68,68,0.7)"}
+                      stroke={index === curMo ? (dark ? "#94a3b8" : "#64748b") : "transparent"}
+                      strokeWidth={index === curMo ? 2 : 0}
+                    />
                   ))}
                 </Bar>
               </RechartsBarChart>
@@ -211,6 +257,7 @@ export const Dashboard = () => {
         </div>
       </div>
 
+      {/* Tabela de Indicadores Mensais */}
       <div className={cd}>
         <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
           Indicadores Mensais
@@ -220,8 +267,14 @@ export const Dashboard = () => {
             <thead>
               <tr className={cn(dark ? "text-slate-400" : "text-slate-500")}>
                 <th className="text-left py-1.5 px-2 font-medium">Indicador</th>
-                {MS.map((m) => (
-                  <th key={m} className="text-center py-1.5 px-1 font-medium">
+                {MS.map((m, i) => (
+                  <th
+                    key={m}
+                    className={cn(
+                      "text-center py-1.5 px-1 font-medium",
+                      i === curMo && (dark ? "bg-violet-900/30 text-violet-400" : "bg-violet-50 text-violet-600")
+                    )}
+                  >
                     {m}
                   </th>
                 ))}
@@ -243,6 +296,7 @@ export const Dashboard = () => {
                       key={i}
                       className={cn(
                         "text-center py-1.5 px-1",
+                        i === curMo && (dark ? "bg-violet-900/20" : "bg-violet-50"),
                         r.k === "profit" && d[r.k as keyof typeof d] < 0
                           ? "text-rose-500 font-semibold"
                           : dark

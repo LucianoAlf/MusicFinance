@@ -195,7 +195,7 @@ export async function deleteProfessor(profId: string) {
 
 // ─── WRITES: Students ──────────────────────────────────────────────────────
 
-export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number }) {
+export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string }) {
   return supabase.from("students").insert({
     school_id: schoolId,
     professor_id: data.professorId,
@@ -204,7 +204,19 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
     lesson_day: data.day,
     lesson_time: data.time,
     tuition_amount: data.tuition || null,
+    enrollment_date: data.enrollmentDate || new Date().toISOString().split("T")[0],
   }).select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date").single();
+}
+
+export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number }) {
+  const update: any = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.situation !== undefined) update.situation = data.situation;
+  if (data.day !== undefined) update.lesson_day = data.day;
+  if (data.hour !== undefined) update.lesson_time = data.hour;
+  if (data.enrollmentDate !== undefined) update.enrollment_date = data.enrollmentDate;
+  if (data.tuitionAmount !== undefined) update.tuition_amount = data.tuitionAmount;
+  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date").single();
 }
 
 export async function deleteStudent(studentId: string) {

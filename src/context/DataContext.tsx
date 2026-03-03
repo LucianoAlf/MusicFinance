@@ -10,6 +10,7 @@ import {
   addProfessor as apiAddProfessor,
   deleteProfessor as apiDeleteProfessor,
   addStudent as apiAddStudent,
+  updateStudent as apiUpdateStudent,
   deleteStudent as apiDeleteStudent,
   upsertPayment as apiUpsertPayment,
   addCostCenter as apiAddCostCenter,
@@ -47,7 +48,8 @@ interface DataContextType {
   saveStatus: SaveStatus;
   handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string }) => Promise<void>;
+  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number }) => Promise<void>;
   handleDeleteStudent: (profId: string, studentId: string) => Promise<void>;
   handleUpdatePayment: (profId: string, studentId: string, month: number, value: string) => Promise<void>;
   handleAddCostCenter: (d: { name: string; color: string }) => Promise<string>;
@@ -192,11 +194,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number }) => {
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const tuitionVal = d.tuition || data.config.tuition;
-    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal });
+    const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
+    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate });
     if (error || !row) { markError(); return; }
 
     const payments12 = Array(12).fill(tuitionVal);
@@ -206,8 +209,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     for (const pi of paymentInserts) await apiUpsertPayment(pi);
 
-    const newStudent = { id: row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || undefined, tuitionAmount: tuitionVal };
+    const newStudent = { id: row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal };
     setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
+    markSaved();
+  };
+
+  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number }) => {
+    if (!data || !schoolId) return;
+    markSaving();
+    const { data: row, error } = await apiUpdateStudent(studentId, updates);
+    if (error || !row) { markError(); return; }
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        professors: prev.professors.map((p) => ({
+          ...p,
+          students: p.students.map((s) => s.id === studentId ? {
+            ...s,
+            name: row.name ?? s.name,
+            situation: row.situation ?? s.situation,
+            day: row.lesson_day ?? s.day,
+            hour: row.lesson_time ?? s.hour,
+            enrollmentDate: row.enrollment_date || undefined,
+            exitDate: row.exit_date || undefined,
+            tuitionAmount: row.tuition_amount ? Number(row.tuition_amount) : s.tuitionAmount,
+          } : s),
+        })),
+      };
+    });
     markSaved();
   };
 
@@ -451,7 +481,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         curMo, setCurMo, selProf, setSelProf, selPay, setSelPay,
         calcMo, saveStatus,
         handleAddProfessor, handleDeleteProfessor,
-        handleAddStudent, handleDeleteStudent, handleUpdatePayment,
+        handleAddStudent, handleUpdateStudent, handleDeleteStudent, handleUpdatePayment,
         handleAddCostCenter, handleDeleteCostCenter,
         handleAddExpenseItem, handleDeleteExpenseItem, handleUpdateExpense,
         handleUpdateRevenue,

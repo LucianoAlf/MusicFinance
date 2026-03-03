@@ -14,6 +14,8 @@ import {
   Plus,
   Music,
   UserPlus,
+  UserMinus,
+  Clock,
   Trash2,
   ChevronDown,
   ChevronRight,
@@ -22,7 +24,7 @@ import {
 } from "lucide-react";
 
 export const Professors = () => {
-  const { data, setData, curMo, selProf, setSelProf, selPay, setSelPay, dark } = useData();
+  const { data, curMo, selProf, setSelProf, selPay, setSelPay, dark, viewKpis, handleAddProfessor, handleDeleteProfessor, handleAddStudent, handleDeleteStudent, handleUpdatePayment } = useData();
   const [showAddProf, setShowAddProf] = useState(false);
   const [showAddStud, setShowAddStud] = useState<string | null>(null);
   const [npName, setNpName] = useState("");
@@ -60,84 +62,54 @@ export const Professors = () => {
   });
   const _pF = _tR > 0 ? _tF / _tR : 0;
   const _tk = _tPg > 0 ? _tR / _tPg : 0;
-  const _ma = _tP > 0 ? _tPg / _tP : 0;
+  const _ma = _tP > 0 ? _tA / _tP : 0;
+
+  const kpiMes = viewKpis?.monthly?.find((k) => k.month === curMo + 1);
+  const avgTenure = viewKpis?.avgTenureMonths ?? 0;
+  const newEnrollments = kpiMes?.newEnrollments ?? 0;
+  const churnedStudents = kpiMes?.churnedStudents ?? 0;
 
   const prof = selProf ? data.professors.find((p) => p.id === selProf) : null;
 
-  const confirmAddProf = () => {
+  const confirmAddProf = async () => {
     if (!npName.trim()) return;
-    const newProf = {
-      id: "p" + Date.now(),
+    await handleAddProfessor({
       name: npName.trim(),
       instrument: npInst.trim() || "Instrumento",
       costPerStudent: Number(npCost) || 100,
-      students: [],
-    };
-    setData({ ...data, professors: [...data.professors, newProf] });
-    setSelProf(newProf.id);
+    });
     setShowAddProf(false);
     setNpName("");
     setNpInst("");
     setNpCost("100");
   };
 
-  const confirmAddStudent = (pid: string) => {
+  const confirmAddStudent = async (pid: string) => {
     if (!nsName.trim()) return;
-    const newStud = {
-      id: "s" + Date.now(),
+    await handleAddStudent(pid, {
       name: nsName.trim(),
-      situation: "Ativo",
-      hour: nsHour,
       day: nsDay,
-      payments: Array(12).fill(Number(nsVal) || data.config.tuition),
-    };
-    setData({
-      ...data,
-      professors: data.professors.map((p) =>
-        p.id === pid ? { ...p, students: [...p.students, newStud] } : p
-      ),
+      time: nsHour,
+      tuition: Number(nsVal) || data.config.tuition,
     });
     setShowAddStud(null);
     setNsName("");
   };
 
-  const removeProf = (pid: string) => {
+  const removeProf = async (pid: string) => {
     if (confirm("Remover?")) {
-      setData({ ...data, professors: data.professors.filter((p) => p.id !== pid) });
-      setSelProf(null);
+      await handleDeleteProfessor(pid);
     }
   };
 
-  const removeStudent = (pid: string, sid: string) => {
+  const removeStudent = async (pid: string, sid: string) => {
     if (confirm("Remover?")) {
-      setData({
-        ...data,
-        professors: data.professors.map((p) =>
-          p.id === pid ? { ...p, students: p.students.filter((s) => s.id !== sid) } : p
-        ),
-      });
+      await handleDeleteStudent(pid, sid);
     }
   };
 
   const updatePay = (pid: string, sid: string, m: number, v: string) => {
-    setData({
-      ...data,
-      professors: data.professors.map((p) =>
-        p.id === pid
-          ? {
-              ...p,
-              students: p.students.map((s) =>
-                s.id === sid
-                  ? {
-                      ...s,
-                      payments: s.payments.map((pay, i) => (i === m ? (v === "" ? null : Number(v)) : pay)),
-                    }
-                  : s
-              ),
-            }
-          : p
-      ),
-    });
+    handleUpdatePayment(pid, sid, m, v);
   };
 
   return (
@@ -166,6 +138,11 @@ export const Professors = () => {
         <KpiCard icon={Target} label="% Folha/Fat." value={pct(_pF)} color={_pF > 0.45 ? "red" : "green"} />
         <KpiCard icon={BarChart} label="Ticket Medio" value={brl(_tk)} color="teal" />
         <KpiCard icon={Activity} label="Media Al/Prof" value={_ma.toFixed(1)} color="blue" />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <KpiCard icon={Clock} label="Permanência" value={avgTenure.toFixed(1) + " meses"} color="cyan" />
+        <KpiCard icon={UserPlus} label={`Matrículas ${MS[curMo]}`} value={newEnrollments} color="teal" />
+        <KpiCard icon={UserMinus} label={`Evasões ${MS[curMo]}`} value={churnedStudents} color="red" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

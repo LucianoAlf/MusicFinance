@@ -7,23 +7,29 @@ interface KpiCardProps {
   icon: React.ElementType;
   label: string;
   value: string | number;
-  color: "green" | "blue" | "purple" | "red" | "teal";
+  color: "green" | "blue" | "purple" | "red" | "teal" | "orange" | "amber" | "cyan" | "rose";
   trend?: number | null;
+  invertTrend?: boolean;
   sub?: string;
 }
 
-export const KpiCard: React.FC<KpiCardProps> = ({ icon: Icon, label, value, color, trend, sub }) => {
+export const KpiCard: React.FC<KpiCardProps> = ({ icon: Icon, label, value, color, trend, invertTrend, sub }) => {
   const { dark } = useData();
 
-  const cs = {
+  const cs: Record<string, string> = {
     green: "from-emerald-500 to-emerald-600",
     blue: "from-blue-500 to-blue-600",
     purple: "from-violet-500 to-violet-600",
     red: "from-rose-500 to-red-500",
     teal: "from-teal-500 to-cyan-500",
+    orange: "from-orange-500 to-orange-600",
+    amber: "from-amber-500 to-amber-600",
+    cyan: "from-cyan-500 to-cyan-600",
+    rose: "from-rose-400 to-pink-500",
   };
 
-  const up = trend != null && trend >= 0;
+  const rawUp = trend != null && trend >= 0;
+  const up = invertTrend ? !rawUp : rawUp;
 
   return (
     <div

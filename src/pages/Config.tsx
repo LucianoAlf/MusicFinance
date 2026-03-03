@@ -1,11 +1,10 @@
 import React from "react";
 import { useData } from "../context/DataContext";
-import { genData } from "../data/mockData";
 import { cn } from "../lib/utils";
 import { School, BarChart, AlertTriangle, RefreshCw } from "lucide-react";
 
 export const Config = () => {
-  const { data, setData, dark } = useData();
+  const { data, dark, handleUpdateConfig, handleResetData } = useData();
   if (!data) return null;
 
   const cd = cn(
@@ -18,18 +17,18 @@ export const Config = () => {
   );
 
   const updateConfig = (k: keyof typeof data.config, v: string | number) => {
-    setData({ ...data, config: { ...data.config, [k]: v } });
+    handleUpdateConfig(k, v);
   };
 
-  const handleReset = () => {
-    if (confirm("Substituir TODOS os dados por dados de exemplo?")) {
-      setData(genData());
+  const handleReset = async () => {
+    if (confirm("Resetar TODOS os dados desta escola? Centros de custo e categorias de receita serao recriados com valores padrao.")) {
+      await handleResetData();
     }
   };
 
   return (
     <div className="space-y-4 max-w-lg">
-      <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Configurações</h1>
+      <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Configuracoes</h1>
 
       <div className={cd}>
         <h3 className={cn("text-xs font-semibold mb-4 flex items-center gap-1.5", dark ? "text-slate-300" : "text-slate-700")}>
@@ -86,7 +85,7 @@ export const Config = () => {
 
       <div className={cd}>
         <h3 className={cn("text-xs font-semibold mb-3 flex items-center gap-1.5", dark ? "text-slate-300" : "text-slate-700")}>
-          <BarChart size={14} /> Estatísticas
+          <BarChart size={14} /> Estatisticas
         </h3>
         <div className="grid grid-cols-3 gap-3 text-center">
           <div
@@ -128,7 +127,7 @@ export const Config = () => {
           <AlertTriangle size={14} /> Zona de Perigo
         </h3>
         <p className={cn("text-[10px] mb-3", dark ? "text-slate-400" : "text-slate-500")}>
-          Substituir todos os dados por dados de exemplo.
+          Resetar todos os dados da escola. Centros de custo e categorias de receita serao recriados com valores padrao.
         </p>
         <button
           onClick={handleReset}

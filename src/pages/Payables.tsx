@@ -18,7 +18,7 @@ import { PayableBill } from "../types";
 const COLORS = ["#0ea5e9", "#f97316", "#ec4899", "#84cc16", "#64748b", "#8b5cf6", "#14b8a6", "#f43f5e"];
 
 export const Payables = () => {
-  const { data, setData, curMo, setCurMo, dark } = useData();
+  const { data, curMo, setCurMo, dark, handleSaveBills, handleToggleBillStatus, handleDeleteBills, handleUpdateBill, handleAddCostCenter, handleAddExpenseItem } = useData();
   const [showModal, setShowModal] = useState(false);
 
   // Form State
@@ -59,7 +59,7 @@ export const Payables = () => {
   const totalPaid = curMonthBills.filter((b) => b.status === "PAID").reduce((acc, b) => acc + b.amount, 0);
   const totalPending = totalMonth - totalPaid;
 
-  const handleSaveBill = () => {
+  const handleSaveBill = async () => {
     if (!desc.trim() || !amount || !dueDate) return;
     if (!isNewCc && !ccId) return;
     if (!isNewEi && !eiId) return;
@@ -68,43 +68,30 @@ export const Payables = () => {
 
     let finalCcId = ccId;
     let finalEiId = eiId;
-    const newData = { ...data };
 
     if (isNewCc) {
-      finalCcId = "cc" + Date.now();
-      newData.expenses.push({
-        id: finalCcId,
-        name: newCcName.trim(),
-        color: COLORS[newData.expenses.length % COLORS.length],
-        items: [],
-      });
+      finalCcId = await handleAddCostCenter({ name: newCcName.trim(), color: COLORS[data.expenses.length % COLORS.length] });
+      if (!finalCcId) return;
     }
-
-    const ccIndex = newData.expenses.findIndex((c) => c.id === finalCcId);
 
     if (isNewEi) {
-      finalEiId = "ei" + Date.now();
-      newData.expenses[ccIndex].items.push({
-        id: finalEiId,
-        name: newEiName.trim(),
-        type: type === "RECURRENT_VARIABLE" ? "V" : "F",
-        amounts: Array(12).fill(0),
-      });
+      const eiType = type === "RECURRENT_VARIABLE" ? "V" as const : "F" as const;
+      finalEiId = await handleAddExpenseItem(finalCcId, { name: newEiName.trim(), type: eiType });
+      if (!finalEiId) return;
     }
-
-    const eiIndex = newData.expenses[ccIndex].items.findIndex((e) => e.id === finalEiId);
 
     const baseDate = new Date(dueDate + "T12:00:00");
     const startMonth = baseDate.getMonth();
     const startYear = baseDate.getFullYear();
 
     const billsToCreate: PayableBill[] = [];
+    const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
     const groupId = "grp" + Date.now();
     const baseAmount = Number(amount);
 
     if (type === "UNIQUE") {
       billsToCreate.push({
-        id: "bill" + Date.now(),
+        id: "temp",
         description: desc.trim(),
         costCenterId: finalCcId,
         expenseItemId: finalEiId,
@@ -114,7 +101,7 @@ export const Payables = () => {
         status: "PENDING",
       });
       if (startYear === data.config.year) {
-        newData.expenses[ccIndex].items[eiIndex].amounts[startMonth] += baseAmount;
+        expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: startMonth, delta: baseAmount });
       }
     } else if (type === "INSTALLMENT") {
       const instCount = Number(installments);
@@ -124,7 +111,7 @@ export const Payables = () => {
         d.setMonth(d.getMonth() + i);
         if (d.getFullYear() === data.config.year) {
           billsToCreate.push({
-            id: "bill" + Date.now() + i,
+            id: "temp" + i,
             description: `${desc.trim()} (${i + 1}/${instCount})`,
             costCenterId: finalCcId,
             expenseItemId: finalEiId,
@@ -136,15 +123,15 @@ export const Payables = () => {
             status: "PENDING",
             groupId,
           });
-          newData.expenses[ccIndex].items[eiIndex].amounts[d.getMonth()] += installmentAmount;
+          expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: d.getMonth(), delta: installmentAmount });
         }
       }
-    } else if (type === "RECURRENT_FIXED" || type === "RECURRENT_VARIABLE") {
+    } else {
       for (let i = startMonth; i < 12; i++) {
         const d = new Date(baseDate);
         d.setMonth(i);
         billsToCreate.push({
-          id: "bill" + Date.now() + i,
+          id: "temp" + i,
           description: desc.trim(),
           costCenterId: finalCcId,
           expenseItemId: finalEiId,
@@ -154,12 +141,11 @@ export const Payables = () => {
           status: "PENDING",
           groupId,
         });
-        newData.expenses[ccIndex].items[eiIndex].amounts[i] += baseAmount;
+        expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: i, delta: baseAmount });
       }
     }
 
-    newData.payableBills = [...(newData.payableBills || []), ...billsToCreate];
-    setData(newData);
+    await handleSaveBills(billsToCreate, expenseUpdates);
     setShowModal(false);
     resetForm();
   };
@@ -179,84 +165,57 @@ export const Payables = () => {
   };
 
   const toggleStatus = (billId: string) => {
-    const newData = { ...data };
-    newData.payableBills = newData.payableBills.map((b) =>
-      b.id === billId ? { ...b, status: b.status === "PAID" ? "PENDING" : "PAID" } : b
-    );
-    setData(newData);
+    handleToggleBillStatus(billId);
   };
 
-  const deleteBill = (billId: string) => {
+  const deleteBill = async (billId: string) => {
     const bill = data.payableBills.find((b) => b.id === billId);
     if (!bill) return;
 
     let deleteAll = false;
     if (bill.groupId) {
-      deleteAll = confirm("Esta conta faz parte de uma série. Deseja excluir todas as contas futuras desta série?");
+      deleteAll = confirm("Esta conta faz parte de uma serie. Deseja excluir todas as contas futuras desta serie?");
     } else {
       if (!confirm("Excluir esta conta?")) return;
     }
 
-    const newData = { ...data };
-    let billsToDelete = [bill];
-
+    let billsToRemove = [bill];
     if (deleteAll && bill.groupId) {
-      billsToDelete = newData.payableBills.filter((b) => {
+      billsToRemove = data.payableBills.filter((b) => {
         if (b.groupId !== bill.groupId) return false;
-        const bDate = new Date(b.dueDate + "T12:00:00");
-        const thisDate = new Date(bill.dueDate + "T12:00:00");
-        return bDate >= thisDate;
+        return new Date(b.dueDate + "T12:00:00") >= new Date(bill.dueDate + "T12:00:00");
       });
     }
 
-    billsToDelete.forEach((b) => {
+    const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
+    billsToRemove.forEach((b) => {
       const billMonth = new Date(b.dueDate + "T12:00:00").getMonth();
-      const ccIndex = newData.expenses.findIndex((c) => c.id === b.costCenterId);
-      if (ccIndex >= 0) {
-        const eiIndex = newData.expenses[ccIndex].items.findIndex((e) => e.id === b.expenseItemId);
-        if (eiIndex >= 0) {
-          newData.expenses[ccIndex].items[eiIndex].amounts[billMonth] -= b.amount;
-          if (newData.expenses[ccIndex].items[eiIndex].amounts[billMonth] < 0) {
-            newData.expenses[ccIndex].items[eiIndex].amounts[billMonth] = 0;
-          }
-        }
+      if (b.costCenterId && b.expenseItemId) {
+        expenseUpdates.push({ ccId: b.costCenterId, eiId: b.expenseItemId, month: billMonth, delta: -b.amount });
       }
     });
 
-    const idsToDelete = billsToDelete.map((b) => b.id);
-    newData.payableBills = newData.payableBills.filter((b) => !idsToDelete.includes(b.id));
-
-    setData(newData);
+    await handleDeleteBills(billsToRemove.map((b) => b.id), expenseUpdates);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingBill || !editAmount || !editDate) return;
-    
     const newAmt = Number(editAmount);
     const oldMonth = new Date(editingBill.dueDate + "T12:00:00").getMonth();
     const newMonth = new Date(editDate + "T12:00:00").getMonth();
-    
-    const newData = { ...data };
-    
-    newData.payableBills = newData.payableBills.map(b => 
-      b.id === editingBill.id ? { ...b, amount: newAmt, dueDate: editDate } : b
-    );
-    
-    const ccIndex = newData.expenses.findIndex(c => c.id === editingBill.costCenterId);
-    if (ccIndex >= 0) {
-      const eiIndex = newData.expenses[ccIndex].items.findIndex(e => e.id === editingBill.expenseItemId);
-      if (eiIndex >= 0) {
-        if (oldMonth === newMonth) {
-          const diff = newAmt - editingBill.amount;
-          newData.expenses[ccIndex].items[eiIndex].amounts[oldMonth] += diff;
-        } else {
-          newData.expenses[ccIndex].items[eiIndex].amounts[oldMonth] -= editingBill.amount;
-          newData.expenses[ccIndex].items[eiIndex].amounts[newMonth] += newAmt;
-        }
+
+    const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
+    if (editingBill.costCenterId && editingBill.expenseItemId) {
+      if (oldMonth === newMonth) {
+        const diff = newAmt - editingBill.amount;
+        if (diff !== 0) expenseUpdates.push({ ccId: editingBill.costCenterId, eiId: editingBill.expenseItemId, month: oldMonth, delta: diff });
+      } else {
+        expenseUpdates.push({ ccId: editingBill.costCenterId, eiId: editingBill.expenseItemId, month: oldMonth, delta: -editingBill.amount });
+        expenseUpdates.push({ ccId: editingBill.costCenterId, eiId: editingBill.expenseItemId, month: newMonth, delta: newAmt });
       }
     }
-    
-    setData(newData);
+
+    await handleUpdateBill(editingBill.id, { amount: newAmt, dueDate: editDate }, expenseUpdates);
     setEditingBill(null);
   };
 

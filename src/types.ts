@@ -7,6 +7,9 @@ export interface Student {
   hour: string;
   day: string;
   payments: PaymentArray;
+  enrollmentDate?: string;
+  exitDate?: string;
+  tuitionAmount?: number;
 }
 
 export interface Professor {
@@ -54,7 +57,9 @@ export interface PayableBill {
   expenseItemId: string;
   type: 'UNIQUE' | 'RECURRENT_FIXED' | 'RECURRENT_VARIABLE' | 'INSTALLMENT';
   amount: number;
-  dueDate: string; // YYYY-MM-DD
+  paidAmount?: number;
+  dueDate: string;
+  paidAt?: string;
   totalInstallments?: number;
   currentInstallment?: number;
   status: 'PENDING' | 'PAID';
@@ -69,4 +74,27 @@ export interface DashboardData {
   payableBills: PayableBill[];
 }
 
+export interface MonthlyKpi {
+  month: number;
+  tuitionRevenue: number;
+  payingStudents: number;
+  activeStudents: number;
+  newEnrollments: number;
+  churnedStudents: number;
+  professorPayroll: number;
+  churnRate: number;
+}
 
+export interface BreakevenData {
+  month: number;
+  fixedCosts: number;
+  variableCosts: number;
+  revenue: number;
+  breakevenRevenue: number | null;
+}
+
+export interface ViewKpis {
+  monthly: MonthlyKpi[];
+  breakeven: BreakevenData[];
+  avgTenureMonths: number;
+}

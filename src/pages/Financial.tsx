@@ -24,7 +24,7 @@ const SUGGESTED_CC = [
 ];
 
 export const Financial = () => {
-  const { data, setData, curMo, setCurMo, calcMo, dark } = useData();
+  const { data, curMo, setCurMo, calcMo, dark, viewKpis, handleUpdateRevenue, handleUpdateExpense, handleAddExpenseItem, handleDeleteExpenseItem, handleAddCostCenter, handleDeleteCostCenter } = useData();
   const [showAddExp, setShowAddExp] = useState<number | null>(null);
   const [neN, setNeN] = useState("");
   const [neT, setNeT] = useState<"F" | "V">("F");
@@ -46,53 +46,43 @@ export const Financial = () => {
   );
 
   const updateRev = (k: keyof typeof data.revenue, v: string) => {
-    const newRev = { ...data.revenue };
-    if (!newRev[k]) newRev[k] = Array(12).fill(0);
-    newRev[k][curMo] = Number(v) || 0;
-    setData({ ...data, revenue: newRev });
+    handleUpdateRevenue(k, curMo, Number(v) || 0);
   };
 
   const updateExp = (ci: number, ii: number, v: string) => {
-    const newExp = [...data.expenses];
-    newExp[ci].items[ii].amounts[curMo] = Number(v) || 0;
-    setData({ ...data, expenses: newExp });
+    const cc = data.expenses[ci];
+    const ei = cc.items[ii];
+    if (ei.id) handleUpdateExpense(cc.id, ei.id, curMo, Number(v) || 0);
   };
 
-  const confirmAddExp = () => {
+  const confirmAddExp = async () => {
     if (!neN.trim() || showAddExp === null) return;
-    const newExp = [...data.expenses];
-    newExp[showAddExp].items.push({ id: `ei${showAddExp}-${Date.now()}`, name: neN.trim(), type: neT, amounts: Array(12).fill(0) });
-    setData({ ...data, expenses: newExp });
+    const cc = data.expenses[showAddExp];
+    await handleAddExpenseItem(cc.id, { name: neN.trim(), type: neT });
     setShowAddExp(null);
     setNeN("");
     setNeT("F");
   };
 
-  const removeExp = (ci: number, ii: number) => {
+  const removeExp = async (ci: number, ii: number) => {
     if (confirm("Remover esta linha de despesa?")) {
-      const newExp = [...data.expenses];
-      newExp[ci].items.splice(ii, 1);
-      setData({ ...data, expenses: newExp });
+      const cc = data.expenses[ci];
+      const ei = cc.items[ii];
+      if (ei.id) await handleDeleteExpenseItem(cc.id, ei.id);
     }
   };
 
-  const confirmAddCC = () => {
+  const confirmAddCC = async () => {
     if (!ncName.trim()) return;
-    const newCC = {
-      id: "cc" + Date.now(),
-      name: ncName.trim(),
-      color: ncColor,
-      items: [],
-    };
-    setData({ ...data, expenses: [...data.expenses, newCC] });
+    await handleAddCostCenter({ name: ncName.trim(), color: ncColor });
     setShowAddCC(false);
     setNcName("");
     setNcColor("#0ea5e9");
   };
 
-  const removeCC = (id: string) => {
+  const removeCC = async (id: string) => {
     if (confirm("Remover este centro de custo e todas as suas despesas?")) {
-      setData({ ...data, expenses: data.expenses.filter((cc) => cc.id !== id) });
+      await handleDeleteCostCenter(id);
     }
   };
 
@@ -132,6 +122,40 @@ export const Financial = () => {
         <KpiCard icon={Target} label="Margem" value={pct(calc.margin)} color="purple" />
         <KpiCard icon={GraduationCap} label="Pagantes" value={calc.payingStudents} color="blue" />
       </div>
+
+      {(() => {
+        const beMes = viewKpis?.breakeven?.find((b) => b.month === curMo + 1);
+        if (!beMes?.breakevenRevenue || !calc) return null;
+        const pctBe = Math.min(calc.revenue / beMes.breakevenRevenue, 1.5);
+        const above = calc.revenue >= beMes.breakevenRevenue;
+        const diff = Math.abs(calc.revenue - beMes.breakevenRevenue);
+        return (
+          <div className={cn("rounded-2xl p-4 shadow-sm border", dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100")}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={cn("text-xs font-semibold", dark ? "text-slate-300" : "text-slate-700")}>
+                Ponto de Equilíbrio
+              </span>
+              <span className={cn("text-[11px] font-bold", above ? (dark ? "text-emerald-400" : "text-emerald-600") : (dark ? "text-rose-400" : "text-rose-600"))}>
+                {above ? `Acima em ${brl(diff)}` : `Faltam ${brl(diff)}`}
+              </span>
+            </div>
+            <div className={cn("w-full h-3 rounded-full overflow-hidden", dark ? "bg-slate-700" : "bg-slate-200")}>
+              <div
+                className={cn("h-full rounded-full transition-all duration-500", above ? "bg-emerald-500" : "bg-rose-500")}
+                style={{ width: `${Math.max(pctBe * 100, 2)}%` }}
+              />
+            </div>
+            <div className="flex justify-between mt-1.5">
+              <span className={cn("text-[10px]", dark ? "text-slate-500" : "text-slate-400")}>
+                Receita: {brl(calc.revenue)}
+              </span>
+              <span className={cn("text-[10px]", dark ? "text-slate-500" : "text-slate-400")}>
+                PE: {brl(beMes.breakevenRevenue)}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className={cd}>

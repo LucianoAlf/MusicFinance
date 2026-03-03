@@ -1,7 +1,7 @@
 import React from "react";
 import { useData } from "../context/DataContext";
 import { KpiCard } from "../components/KpiCard";
-import { brl, pct, MS, CCN, CCC, cn } from "../lib/utils";
+import { brl, pct, MS, cn } from "../lib/utils";
 import {
   DollarSign,
   Wallet,
@@ -9,6 +9,12 @@ import {
   Target,
   GraduationCap,
   BarChart,
+  UserPlus,
+  UserMinus,
+  TrendingDown,
+  Clock,
+  Crosshair,
+  Users,
 } from "lucide-react";
 import {
   LineChart,
@@ -27,17 +33,32 @@ import {
 } from "recharts";
 
 export const Dashboard = () => {
-  const { data, calcMo, dark } = useData();
+  const { data, calcMo, curMo, dark, viewKpis } = useData();
   if (!data) return null;
 
   const md = Array.from({ length: 12 }, (_, i) => calcMo(i));
   const tR = md.reduce((a, d) => a + d.revenue, 0);
   const tE = md.reduce((a, d) => a + d.expenses, 0);
-  const last = md[11];
-  const prev = md[10];
 
-  const revT = prev.revenue > 0 ? ((last.revenue - prev.revenue) / prev.revenue) * 100 : 0;
-  const profT = prev.profit !== 0 ? ((last.profit - prev.profit) / Math.abs(prev.profit)) * 100 : 0;
+  const cur = md[curMo];
+  const prev = curMo > 0 ? md[curMo - 1] : null;
+
+  const trend = (curVal: number, prevVal: number | null | undefined) => {
+    if (prevVal == null || prevVal === 0) return null;
+    return ((curVal - prevVal) / Math.abs(prevVal)) * 100;
+  };
+
+  const kpiMes = viewKpis?.monthly?.find((k) => k.month === curMo + 1);
+  const kpiPrev = viewKpis?.monthly?.find((k) => k.month === curMo);
+  const beMes = viewKpis?.breakeven?.find((b) => b.month === curMo + 1);
+
+  const newEnrollments = kpiMes?.newEnrollments ?? 0;
+  const churnedStudents = kpiMes?.churnedStudents ?? 0;
+  const churnRate = kpiMes?.churnRate ?? 0;
+  const activeStudents = kpiMes?.activeStudents ?? 0;
+  const avgTenure = viewKpis?.avgTenureMonths ?? 0;
+  const breakevenRevenue = beMes?.breakevenRevenue;
+
   const avgM = tR > 0 ? (tR - tE) / tR : 0;
 
   const ccT = (data.expenses || []).map((cc) => {
@@ -67,13 +88,32 @@ export const Dashboard = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard icon={DollarSign} label="Receita Anual" value={brl(tR)} color="green" trend={revT} />
-        <KpiCard icon={Wallet} label="Despesas" value={brl(tE)} color="red" />
-        <KpiCard icon={PiggyBank} label="Lucro" value={brl(tR - tE)} color={tR - tE >= 0 ? "green" : "red"} trend={profT} />
-        <KpiCard icon={Target} label="Margem" value={pct(avgM)} color="purple" />
-        <KpiCard icon={GraduationCap} label="Pagantes" value={last.payingStudents} color="blue" sub={`${data.professors.length} profs`} />
-        <KpiCard icon={BarChart} label="Ticket" value={brl(last.ticket)} color="teal" sub={`Custo ${brl(last.costPerStudent)}`} />
+      <div>
+        <p className={cn("text-[10px] font-semibold mb-2 uppercase tracking-wider", dark ? "text-slate-500" : "text-slate-400")}>
+          Financeiro
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <KpiCard icon={DollarSign} label="Receita Anual" value={brl(tR)} color="green" trend={trend(cur.revenue, prev?.revenue)} />
+          <KpiCard icon={Wallet} label="Despesas" value={brl(tE)} color="red" />
+          <KpiCard icon={PiggyBank} label="Lucro" value={brl(tR - tE)} color={tR - tE >= 0 ? "green" : "red"} trend={trend(cur.profit, prev?.profit)} />
+          <KpiCard icon={Target} label="Margem" value={pct(avgM)} color="purple" />
+          <KpiCard icon={BarChart} label="Ticket" value={brl(cur.ticket)} color="teal" sub={`Custo ${brl(cur.costPerStudent)}`} />
+          <KpiCard icon={Crosshair} label="Ponto Equil." value={breakevenRevenue != null ? brl(breakevenRevenue) : "—"} color="orange" />
+        </div>
+      </div>
+
+      <div>
+        <p className={cn("text-[10px] font-semibold mb-2 uppercase tracking-wider", dark ? "text-slate-500" : "text-slate-400")}>
+          Alunos — {MS[curMo]}
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <KpiCard icon={Users} label="Ativos" value={activeStudents} color="blue" />
+          <KpiCard icon={GraduationCap} label="Pagantes" value={cur.payingStudents} color="green" sub={`${data.professors.length} profs`} />
+          <KpiCard icon={UserPlus} label="Matrículas" value={newEnrollments} color="teal" trend={trend(newEnrollments, kpiPrev?.newEnrollments ?? null)} />
+          <KpiCard icon={UserMinus} label="Evasões" value={churnedStudents} color="red" trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
+          <KpiCard icon={TrendingDown} label="Churn Rate" value={churnRate.toFixed(1) + "%"} color="rose" trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
+          <KpiCard icon={Clock} label="Permanência" value={avgTenure.toFixed(1) + " m"} color="cyan" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

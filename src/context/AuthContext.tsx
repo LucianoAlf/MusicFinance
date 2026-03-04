@@ -16,11 +16,11 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   tenantId: string | null;
+  isSuperadmin: boolean;
   schools: School[];
   selectedSchool: School | null;
   setSelectedSchool: (school: School) => void;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (name: string, email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   createSchool: (name: string, tuition?: number, passport?: number, year?: number) => Promise<{ error?: string }>;
   refreshSchools: () => Promise<void>;
@@ -35,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(null);
 
@@ -48,6 +49,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data) setTenantId(data.tenant_id);
     return data?.tenant_id ?? null;
   }, []);
+
+  const checkSuperadmin = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from("superadmins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .single();
+    setIsSuperadmin(!!data);
+    return !!data;
+  }, []);
+
+  const ensureTenantForInvitedUser = useCallback(async (userId: string, email: string) => {
+    const tid = await fetchTenantId(userId);
+    if (tid) return tid;
+
+    const { data: newTid, error } = await supabase.rpc("create_tenant_for_user", {
+      p_name: email.split("@")[0],
+      p_email: email,
+    });
+    if (error) {
+      console.error("Failed to create tenant for invited user:", error.message);
+      return null;
+    }
+    setTenantId(newTid);
+    return newTid;
+  }, [fetchTenantId]);
 
   const fetchSchools = useCallback(async () => {
     const { data } = await supabase
@@ -81,6 +108,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [setSelectedSchool]);
 
+  const initUser = useCallback(async (u: User) => {
+    await checkSuperadmin(u.id);
+    await ensureTenantForInvitedUser(u.id, u.email || "");
+    const list = await fetchSchools();
+    restoreSchool(list);
+  }, [checkSuperadmin, ensureTenantForInvitedUser, fetchSchools, restoreSchool]);
+
   useEffect(() => {
     const init = async () => {
       const { data: { session: s } } = await supabase.auth.getSession();
@@ -88,19 +122,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(s?.user ?? null);
 
       if (s?.user) {
-        await fetchTenantId(s.user.id);
-        const list = await fetchSchools();
-        restoreSchool(list);
+        await initUser(s.user);
       }
       setLoading(false);
     };
     init();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
-      if (!s?.user) {
+      if (s?.user) {
+        await initUser(s.user);
+      } else {
         setTenantId(null);
+        setIsSuperadmin(false);
         setSchools([]);
         setSelectedSchoolState(null);
         localStorage.removeItem(SCHOOL_STORAGE_KEY);
@@ -108,7 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchTenantId, fetchSchools, restoreSchool]);
+  }, [initUser]);
 
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -116,26 +151,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data: { user: u } } = await supabase.auth.getUser();
     if (u) {
-      await fetchTenantId(u.id);
-      const list = await fetchSchools();
-      restoreSchool(list);
+      await initUser(u);
     }
-    return {};
-  };
-
-  const signUp = async (name: string, email: string, password: string): Promise<{ error?: string }> => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message };
-    if (!data.user) return { error: "Erro ao criar conta." };
-
-    const { data: tid, error: rpcError } = await supabase.rpc("create_tenant_for_user", {
-      p_name: name,
-      p_email: email,
-    });
-    if (rpcError) return { error: rpcError.message };
-
-    setTenantId(tid);
-    setSchools([]);
     return {};
   };
 
@@ -144,6 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setSession(null);
     setTenantId(null);
+    setIsSuperadmin(false);
     setSchools([]);
     setSelectedSchoolState(null);
     localStorage.removeItem(SCHOOL_STORAGE_KEY);
@@ -175,8 +193,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider
       value={{
-        user, session, loading, tenantId, schools, selectedSchool,
-        setSelectedSchool, signIn, signUp, signOut, createSchool, refreshSchools,
+        user, session, loading, tenantId, isSuperadmin, schools, selectedSchool,
+        setSelectedSchool, signIn, signOut, createSchool, refreshSchools,
       }}
     >
       {children}

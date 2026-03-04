@@ -9,15 +9,16 @@ import { Financial } from "./pages/Financial";
 import { Payables } from "./pages/Payables";
 import { Dre } from "./pages/Dre";
 import { Config } from "./pages/Config";
+import { Admin } from "./pages/Admin";
 import { Login } from "./pages/Login";
-import { Signup } from "./pages/Signup";
 import { SchoolSelector } from "./pages/SchoolSelector";
 import { CreateSchool } from "./pages/CreateSchool";
 import { cn } from "./lib/utils";
-import { Loader2, Music } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 const AppContent = () => {
   const { page, dark } = useData();
+  const { isSuperadmin } = useAuth();
 
   React.useEffect(() => {
     if (dark) {
@@ -44,6 +45,7 @@ const AppContent = () => {
           {page === "payables" && <Payables />}
           {page === "dre" && <Dre />}
           {page === "config" && <Config />}
+          {page === "admin" && isSuperadmin && <Admin />}
         </div>
       </main>
     </div>
@@ -57,18 +59,12 @@ const LoadingScreen = () => (
   </div>
 );
 
-const AuthPages = () => {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  if (mode === "signup") return <Signup onGoToLogin={() => setMode("login")} />;
-  return <Login onGoToSignup={() => setMode("signup")} />;
-};
-
 const AppRouter = () => {
-  const { user, loading, selectedSchool, schools } = useAuth();
+  const { user, loading, selectedSchool, schools, isSuperadmin } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
 
   if (loading) return <LoadingScreen />;
-  if (!user) return <AuthPages />;
+  if (!user) return <Login />;
 
   if (!selectedSchool) {
     if (schools.length === 0 || showCreateSchool) {

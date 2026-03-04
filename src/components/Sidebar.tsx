@@ -1,5 +1,6 @@
 import React from "react";
 import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
 import {
   LayoutDashboard,
@@ -10,10 +11,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Receipt,
+  Shield,
 } from "lucide-react";
 
 export const Sidebar = () => {
   const { page, setPage, sideCol, setSideCol } = useData();
+  const { isSuperadmin } = useAuth();
 
   const items = [
     { id: "dash", icon: LayoutDashboard, label: "Dashboard" },
@@ -22,6 +25,7 @@ export const Sidebar = () => {
     { id: "payables", icon: Receipt, label: "Contas a Pagar" },
     { id: "dre", icon: TrendingUp, label: "DRE Anual" },
     { id: "config", icon: Settings, label: "Configurações" },
+    ...(isSuperadmin ? [{ id: "admin", icon: Shield, label: "Admin" }] : []),
   ];
 
   return (

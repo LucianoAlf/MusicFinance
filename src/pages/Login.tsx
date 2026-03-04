@@ -2,10 +2,6 @@ import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Loader2, LayoutDashboard, Users, DollarSign, Receipt, TrendingUp } from "lucide-react";
 
-interface Props {
-  onGoToSignup: () => void;
-}
-
 const FEATURES = [
   { icon: LayoutDashboard, title: "Dashboard com KPIs", desc: "Receita, ticket medio, ponto de equilibrio e churn em tempo real" },
   { icon: Users, title: "Professores & Alunos", desc: "Gestao completa de matriculas, pagamentos e inadimplencia" },
@@ -14,7 +10,7 @@ const FEATURES = [
   { icon: TrendingUp, title: "DRE Automatico", desc: "Demonstrativo de resultado com margem de contribuicao e EBITDA" },
 ];
 
-export const Login: React.FC<Props> = ({ onGoToSignup }) => {
+export const Login: React.FC = () => {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -112,7 +108,7 @@ export const Login: React.FC<Props> = ({ onGoToSignup }) => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-4 py-3 rounded-xl bg-surface-secondary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-green/30 focus:border-accent-green/50 transition-all text-sm"
-                  placeholder="luciano@lamusic.com"
+                  placeholder="seu@email.com"
                 />
               </div>
               <div>
@@ -137,16 +133,8 @@ export const Login: React.FC<Props> = ({ onGoToSignup }) => {
               Entrar no Sistema
             </button>
 
-            <p className="mt-4 text-[11px] text-text-tertiary text-center">
-              AES 256-bit SSL
-            </p>
-
-            <p className="mt-6 text-center text-sm text-text-secondary">
-              Apenas membros autorizados da equipe LA Music{" "}
-              podem acessar este sistema.{" "}
-              <button type="button" onClick={onGoToSignup} className="text-accent-green hover:text-accent-green/80 font-semibold cursor-pointer bg-transparent border-none">
-                Cadastre-se
-              </button>
+            <p className="mt-6 text-center text-[11px] text-text-tertiary">
+              Acesso exclusivo para membros da mentoria Maestros da Gestão.
             </p>
           </form>
         </div>

@@ -38,70 +38,70 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-surface-primary px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 mb-4">
-            <Music className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-surface-tertiary mb-4 border border-border-primary">
+            <Music className="w-8 h-8 text-text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary font-sans uppercase">
             {isFirstSchool ? "Crie sua primeira escola" : "Nova escola"}
           </h1>
-          <p className="text-slate-400 mt-1 text-sm">
+          <p className="text-text-secondary mt-1 text-sm">
             {isFirstSchool
               ? "Configure os dados basicos da sua escola de musica"
               : "Adicione uma nova escola ao seu painel"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-slate-800/60 backdrop-blur-sm rounded-2xl p-8 shadow-xl border border-slate-700/50">
+        <form onSubmit={handleSubmit} className="bg-surface-secondary rounded-xl p-8 border border-border-primary">
           {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div className="mb-4 p-3 rounded-xl bg-accent-red/10 border border-accent-red/20 text-accent-red text-sm">
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Nome da escola</label>
+              <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Nome da escola</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                className="w-full px-4 py-2.5 rounded-lg bg-surface-tertiary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-border-hover transition-all"
                 placeholder="Ex: Escola de Musica Tom Jobim"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Mensalidade padrao</label>
+                <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Mensalidade padrao</label>
                 <input
                   type="number"
                   value={tuition}
                   onChange={(e) => setTuition(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                  className="w-full px-4 py-2.5 rounded-lg bg-surface-tertiary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-border-hover transition-all"
                   placeholder="350"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Taxa de matricula</label>
+                <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Taxa de matricula</label>
                 <input
                   type="number"
                   value={passport}
                   onChange={(e) => setPassport(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                  className="w-full px-4 py-2.5 rounded-lg bg-surface-tertiary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-border-hover transition-all"
                   placeholder="350"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Ano de referencia</label>
+              <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Ano de referencia</label>
               <input
                 type="number"
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                className="w-full px-4 py-2.5 rounded-lg bg-surface-tertiary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-border-hover transition-all"
                 placeholder="2026"
               />
             </div>
@@ -110,7 +110,7 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-semibold hover:from-violet-600 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full mt-6 py-2.5 rounded-lg bg-accent-blue text-surface-primary font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer border-none"
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
             Criar escola
@@ -118,7 +118,7 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
 
           {onBack && (
             <p className="mt-4 text-center">
-              <button type="button" onClick={onBack} className="text-sm text-slate-500 hover:text-slate-300 transition-colors cursor-pointer bg-transparent border-none">
+              <button type="button" onClick={onBack} className="text-[10px] text-text-secondary hover:text-text-primary uppercase tracking-wider font-semibold transition-colors cursor-pointer bg-transparent border-none">
                 Voltar
               </button>
             </p>

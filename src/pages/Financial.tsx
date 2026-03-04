@@ -26,7 +26,7 @@ const SUGGESTED_CC = [
 ];
 
 export const Financial = () => {
-  const { data, curMo, setCurMo, calcMo, dark, viewKpis, handleUpdateRevenue, handleUpdateExpense, handleAddExpenseItem, handleUpdateExpenseItem, handleDeleteExpenseItem, handleAddCostCenter, handleUpdateCostCenter, handleDeleteCostCenter } = useData();
+  const { data, curMo, setCurMo, calcMo, viewKpis, handleUpdateRevenue, handleUpdateExpense, handleAddExpenseItem, handleUpdateExpenseItem, handleDeleteExpenseItem, handleAddCostCenter, handleUpdateCostCenter, handleDeleteCostCenter } = useData();
   const [showAddExp, setShowAddExp] = useState<number | null>(null);
   const [neN, setNeN] = useState("");
   const [neT, setNeT] = useState<"F" | "V">("F");
@@ -51,12 +51,11 @@ export const Financial = () => {
 
   const calc = calcMo(curMo);
   const cd = cn(
-    "rounded-2xl p-5 shadow-sm border",
-    dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100"
+    "rounded-xl p-4 shadow-sm border",
+    "bg-surface-secondary border-border-primary"
   );
   const inp = cn(
-    "w-20 text-right px-2 py-1.5 rounded-lg text-[11px] border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all",
-    dark ? "bg-slate-700 border-slate-600 text-white" : "bg-amber-50 border-amber-200 text-slate-900"
+    "w-20 text-right px-2 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-border-hover transition-all bg-surface-tertiary border-border-secondary text-text-primary"
   );
 
   const updateRev = (k: keyof typeof data.revenue, v: string) => {
@@ -146,27 +145,27 @@ export const Financial = () => {
     setEditEI(null);
   };
 
-  const lbl = cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500");
-  const inpFull = cn("w-full px-3 py-2.5 rounded-xl text-xs border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50", dark ? "bg-slate-700 border-slate-600 text-white" : "bg-slate-50 border-slate-200");
+  const lbl = "text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider";
+  const inpFull = "w-full px-3 py-2.5 rounded-lg text-xs border focus:outline-none focus:ring-1 focus:ring-border-hover bg-surface-tertiary border-border-secondary text-text-primary";
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b border-border-primary pb-4">
         <div>
-          <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Financeiro Mensal</h1>
-          <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
-            {MF[curMo]} / {data.config.year}
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Financeiro</h1>
+          <p className="text-xs mt-1 text-text-secondary">
+            {MF[curMo]} · {data.config.year}
           </p>
         </div>
         <MonthSelector curMo={curMo} setCurMo={setCurMo} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiCard icon={DollarSign} label="Receita" value={brl(calc.revenue)} color="green" />
-        <KpiCard icon={Wallet} label="Despesas" value={brl(calc.expenses)} color="red" />
-        <KpiCard icon={PiggyBank} label="Resultado" value={brl(calc.profit)} color={calc.profit >= 0 ? "green" : "red"} />
-        <KpiCard icon={Target} label="Margem" value={pct(calc.margin)} color="purple" />
-        <KpiCard icon={GraduationCap} label="Pagantes" value={calc.payingStudents} color="blue" />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <KpiCard label="Receita" value={brl(calc.revenue)} />
+        <KpiCard label="Despesas" value={brl(calc.expenses)} />
+        <KpiCard label="Resultado" value={brl(calc.profit)} />
+        <KpiCard label="Margem" value={pct(calc.margin)} />
+        <KpiCard label="Pagantes" value={calc.payingStudents} />
       </div>
 
       {(() => {
@@ -176,26 +175,26 @@ export const Financial = () => {
         const above = calc.revenue >= beMes.breakevenRevenue;
         const diff = Math.abs(calc.revenue - beMes.breakevenRevenue);
         return (
-          <div className={cn("rounded-2xl p-4 shadow-sm border", dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100")}>
+          <div className="rounded-xl p-4 shadow-sm border bg-surface-tertiary border-border-primary">
             <div className="flex items-center justify-between mb-2">
-              <span className={cn("text-xs font-semibold", dark ? "text-slate-300" : "text-slate-700")}>
+              <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">
                 Ponto de Equilíbrio
               </span>
-              <span className={cn("text-[11px] font-bold", above ? (dark ? "text-emerald-400" : "text-emerald-600") : (dark ? "text-rose-400" : "text-rose-600"))}>
+              <span className={cn("text-[11px] font-mono font-medium", above ? "text-accent-green" : "text-accent-red")}>
                 {above ? `Acima em ${brl(diff)}` : `Faltam ${brl(diff)}`}
               </span>
             </div>
-            <div className={cn("w-full h-3 rounded-full overflow-hidden", dark ? "bg-slate-700" : "bg-slate-200")}>
+            <div className="w-full h-2 rounded-full bg-surface-secondary overflow-hidden">
               <div
-                className={cn("h-full rounded-full transition-all duration-500", above ? "bg-emerald-500" : "bg-rose-500")}
+                className={cn("h-full rounded-full transition-all duration-500", above ? "bg-accent-green" : "bg-accent-red")}
                 style={{ width: `${Math.max(pctBe * 100, 2)}%` }}
               />
             </div>
-            <div className="flex justify-between mt-1.5">
-              <span className={cn("text-[10px]", dark ? "text-slate-500" : "text-slate-400")}>
+            <div className="flex justify-between mt-2">
+              <span className="text-[10px] font-mono text-text-secondary">
                 Receita: {brl(calc.revenue)}
               </span>
-              <span className={cn("text-[10px]", dark ? "text-slate-500" : "text-slate-400")}>
+              <span className="text-[10px] font-mono text-text-secondary">
                 PE: {brl(beMes.breakevenRevenue)}
               </span>
             </div>
@@ -205,20 +204,15 @@ export const Financial = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className={cd}>
-          <h3 className={cn("text-xs font-semibold mb-3 flex items-center gap-1.5", dark ? "text-emerald-400" : "text-emerald-700")}>
-            <TrendingUp size={14} /> Receitas
+          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
+            Receitas
           </h3>
           <div className="space-y-1.5">
-            <div
-              className={cn(
-                "flex items-center justify-between py-2 px-3 rounded-xl border",
-                dark ? "bg-emerald-900/10 border-emerald-800/20" : "bg-emerald-50/50 border-emerald-100"
-              )}
-            >
-              <span className={cn("text-[11px] font-medium", dark ? "text-slate-300" : "text-slate-700")}>
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg border bg-surface-tertiary border-border-secondary">
+              <span className="text-[11px] font-medium text-text-secondary">
                 Mensalidades (auto)
               </span>
-              <span className={cn("text-[11px] font-bold", dark ? "text-emerald-400" : "text-emerald-600")}>
+              <span className="text-[11px] font-mono font-medium text-accent-green">
                 {brl(calc.tuition)}
               </span>
             </div>
@@ -229,14 +223,8 @@ export const Financial = () => {
               { k: "interest" as const, l: "Juros/Multas" },
               { k: "other" as const, l: "Outras" },
             ].map((r) => (
-              <div
-                key={r.k}
-                className={cn(
-                  "flex items-center justify-between py-1.5 px-3 rounded-xl",
-                  dark ? "bg-slate-700/30" : "bg-slate-50"
-                )}
-              >
-                <span className={cn("text-[11px]", dark ? "text-slate-300" : "text-slate-700")}>{r.l}</span>
+              <div key={r.k} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-surface-tertiary/50 transition-colors">
+                <span className="text-[11px] text-text-secondary">{r.l}</span>
                 <input
                   type="number"
                   value={data.revenue?.[r.k]?.[curMo] || 0}
@@ -245,62 +233,41 @@ export const Financial = () => {
                 />
               </div>
             ))}
-            <div
-              className={cn(
-                "flex items-center justify-between py-2.5 px-3 rounded-xl font-semibold border",
-                dark ? "bg-emerald-900/30 text-emerald-400 border-transparent" : "bg-emerald-50 text-emerald-700 border-emerald-200"
-              )}
-            >
-              <span className="text-[11px]">TOTAL</span>
-              <span className="text-sm">{brl(calc.revenue)}</span>
+            <div className="flex items-center justify-between py-2.5 px-3 rounded-lg font-semibold border-t border-border-primary mt-2">
+              <span className="text-[11px] uppercase tracking-wider text-text-secondary">TOTAL</span>
+              <span className="text-sm font-mono text-accent-green">{brl(calc.revenue)}</span>
             </div>
           </div>
         </div>
 
         <div className={cd}>
-          <h3 className={cn("text-xs font-semibold mb-3 flex items-center gap-1.5", dark ? "text-rose-400" : "text-rose-700")}>
-            <TrendingDown size={14} /> Despesas
+          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
+            Despesas
           </h3>
           <div className="space-y-1.5">
-            <div
-              className={cn(
-                "flex items-center justify-between py-2 px-3 rounded-xl border",
-                dark ? "bg-violet-900/10 border-violet-800/20" : "bg-violet-50/50 border-violet-100"
-              )}
-            >
-              <span className={cn("text-[11px] font-medium", dark ? "text-slate-300" : "text-slate-700")}>
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg border bg-surface-tertiary border-border-secondary">
+              <span className="text-[11px] font-medium text-text-secondary">
                 Folha Prof. (auto)
               </span>
-              <span className={cn("text-[11px] font-bold", dark ? "text-violet-400" : "text-violet-600")}>
+              <span className="text-[11px] font-mono font-medium text-accent-red">
                 {brl(calc.profPayroll)}
               </span>
             </div>
             {(data.expenses || []).map((cc) => {
               const t = cc.items.reduce((s, it) => s + (it.amounts?.[curMo] || 0), 0);
               return (
-                <div
-                  key={cc.id}
-                  className={cn(
-                    "flex items-center justify-between py-1.5 px-3 rounded-xl",
-                    dark ? "bg-slate-700/30" : "bg-slate-50"
-                  )}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cc.color }}></div>
-                    <span className={cn("text-[11px]", dark ? "text-slate-300" : "text-slate-700")}>{cc.name}</span>
+                <div key={cc.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-surface-tertiary/50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full opacity-80" style={{ backgroundColor: cc.color }}></div>
+                    <span className="text-[11px] text-text-secondary">{cc.name}</span>
                   </div>
-                  <span className={cn("text-[11px] font-medium", dark ? "text-slate-300" : "text-slate-600")}>{brl(t)}</span>
+                  <span className="text-[11px] font-mono font-medium text-text-primary">{brl(t)}</span>
                 </div>
               );
             })}
-            <div
-              className={cn(
-                "flex items-center justify-between py-2.5 px-3 rounded-xl font-semibold border",
-                dark ? "bg-rose-900/30 text-rose-400 border-transparent" : "bg-rose-50 text-rose-700 border-rose-200"
-              )}
-            >
-              <span className="text-[11px]">TOTAL</span>
-              <span className="text-sm">{brl(calc.expenses)}</span>
+            <div className="flex items-center justify-between py-2.5 px-3 rounded-lg font-semibold border-t border-border-primary mt-2">
+              <span className="text-[11px] uppercase tracking-wider text-text-secondary">TOTAL</span>
+              <span className="text-sm font-mono text-accent-red">{brl(calc.expenses)}</span>
             </div>
           </div>
         </div>
@@ -308,12 +275,12 @@ export const Financial = () => {
 
       <div className={cd}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className={cn("text-xs font-semibold", dark ? "text-slate-300" : "text-slate-700")}>
+          <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
             Detalhamento por Centro de Custo
           </h3>
           <button
             onClick={() => setShowAddCC(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 text-violet-600 text-[10px] font-semibold hover:bg-violet-500/20 transition-all border border-violet-500/20 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-tertiary text-text-primary text-[10px] font-semibold hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer"
           >
             <Plus size={12} /> Novo Centro de Custo
           </button>
@@ -322,53 +289,40 @@ export const Financial = () => {
           {(data.expenses || []).map((cc, ci) => (
             <div key={cc.id}>
               <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: cc.color }}></div>
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cc.color }}></div>
                 <button
                   onClick={() => openEditCC(cc)}
-                  className={cn("text-[11px] font-bold border-none bg-transparent cursor-pointer p-0 transition-colors", dark ? "text-slate-300 hover:text-violet-400" : "text-slate-700 hover:text-violet-600")}
+                  className="text-[11px] font-bold border-none bg-transparent cursor-pointer p-0 transition-colors text-text-primary hover:text-accent-blue uppercase tracking-wider"
                 >{cc.name}</button>
                 <button
                   onClick={() => setShowAddExp(ci)}
-                  className={cn(
-                    "ml-auto flex items-center gap-1 text-[9px] px-2 py-1 rounded-lg transition-all border-none cursor-pointer",
-                    dark ? "bg-slate-700 text-slate-400 hover:bg-slate-600" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                  )}
+                  className="ml-auto flex items-center gap-1 text-[9px] px-2 py-1 rounded-lg transition-all border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary hover:bg-surface-tertiary/80"
                 >
                   <Plus size={10} /> Linha
                 </button>
                 <button
                   onClick={() => removeCC(cc.id)}
-                  className={cn(
-                    "flex items-center gap-1 text-[9px] px-2 py-1 rounded-lg transition-all border-none cursor-pointer text-rose-500 hover:bg-rose-500/10",
-                    dark ? "bg-slate-700" : "bg-slate-100"
-                  )}
+                  className="flex items-center gap-1 text-[9px] px-2 py-1 rounded-lg transition-all border-none cursor-pointer text-text-tertiary hover:text-accent-red hover:bg-accent-red/10 bg-transparent"
                 >
                   <Trash2 size={10} />
                 </button>
               </div>
-              <div className="space-y-0.5 ml-5">
+              <div className="space-y-0.5 ml-4">
                 {cc.items.map((it, ii) => (
                   <div
                     key={it.id || ii}
-                    className={cn(
-                      "flex items-center gap-2 py-1.5 px-3 rounded-lg transition-all",
-                      dark ? "bg-slate-700/20 hover:bg-slate-700/40" : "bg-slate-50/70 hover:bg-slate-100"
-                    )}
+                    className="flex items-center gap-2 py-1.5 px-3 rounded-lg transition-all hover:bg-surface-tertiary/50"
                   >
                     <button
                       onClick={() => openEditEI(cc.id, it)}
-                      className={cn("flex-1 text-left text-[11px] border-none bg-transparent cursor-pointer p-0 transition-colors", dark ? "text-slate-300 hover:text-violet-400" : "text-slate-700 hover:text-violet-600")}
+                      className="flex-1 text-left text-[11px] border-none bg-transparent cursor-pointer p-0 transition-colors text-text-secondary hover:text-accent-blue"
                     >{it.name}</button>
                     <span
                       className={cn(
                         "text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
                         it.type === "F"
-                          ? dark
-                            ? "bg-blue-900/30 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : dark
-                          ? "bg-amber-900/30 text-amber-400"
-                          : "bg-amber-50 text-amber-600"
+                          ? "bg-accent-blue/10 text-accent-blue"
+                          : "bg-accent-amber/10 text-accent-amber"
                       )}
                     >
                       {it.type === "F" ? "Fixo" : "Var"}
@@ -382,7 +336,7 @@ export const Financial = () => {
                     />
                     <button
                       onClick={() => removeExp(ci, ii)}
-                      className="p-1 rounded-md text-rose-400 hover:text-rose-600 transition-all border-none bg-transparent cursor-pointer"
+                      className="p-1 rounded-md text-text-tertiary hover:text-accent-red transition-all border-none bg-transparent cursor-pointer"
                     >
                       <X size={12} />
                     </button>
@@ -399,63 +353,51 @@ export const Financial = () => {
         open={showAddExp !== null}
         onOpenChange={(v) => { if (!v) setShowAddExp(null); }}
         title="Nova Despesa"
-        dark={dark}
         size="sm"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>
+            <label className={lbl}>
               Nome
             </label>
             <input
               value={neN}
               onChange={(e) => setNeN(e.target.value)}
-              className={cn(
-                "w-full px-3 py-2.5 rounded-xl text-xs border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50",
-                dark ? "bg-slate-700 border-slate-600 text-white" : "bg-slate-50 border-slate-200"
-              )}
+              className={inpFull}
               placeholder="Ex: Limpeza"
               autoFocus
             />
           </div>
           <div>
-            <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>
+            <label className={lbl}>
               Tipo
             </label>
             <div className="flex gap-2">
               <button
                 onClick={() => setNeT("F")}
                 className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-semibold border-2 cursor-pointer",
+                  "flex-1 py-2.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors",
                   neT === "F"
-                    ? dark ? "bg-blue-900/30 text-blue-400 border-blue-500" : "bg-blue-50 text-blue-600 border-blue-300"
-                    : dark ? "bg-slate-700 text-slate-400 border-slate-600 opacity-40" : "bg-slate-100 text-slate-500 border-slate-200 opacity-40"
+                    ? "bg-accent-blue/10 text-accent-blue border-accent-blue/30"
+                    : "bg-surface-tertiary text-text-secondary border-transparent hover:text-text-primary"
                 )}
               >Fixo</button>
               <button
                 onClick={() => setNeT("V")}
                 className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-semibold border-2 cursor-pointer",
+                  "flex-1 py-2.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors",
                   neT === "V"
-                    ? dark ? "bg-amber-900/30 text-amber-400 border-amber-500" : "bg-amber-50 text-amber-600 border-amber-300"
-                    : dark ? "bg-slate-700 text-slate-400 border-slate-600 opacity-40" : "bg-slate-100 text-slate-500 border-slate-200 opacity-40"
+                    ? "bg-accent-amber/10 text-accent-amber border-accent-amber/30"
+                    : "bg-surface-tertiary text-text-secondary border-transparent hover:text-text-primary"
                 )}
               >Var</button>
             </div>
           </div>
-        </div>
-        <div className="flex gap-2 mt-5">
           <button
             onClick={confirmAddExp}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer"
+            className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Adicionar
-          </button>
-          <button
-            onClick={() => setShowAddExp(null)}
-            className={cn("px-4 py-2.5 rounded-xl text-xs border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}
-          >
-            Cancelar
           </button>
         </div>
       </Modal>
@@ -465,12 +407,11 @@ export const Financial = () => {
         open={showAddCC}
         onOpenChange={(v) => { if (!v) setShowAddCC(false); }}
         title="Novo Centro de Custo"
-        dark={dark}
         size="sm"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>
+            <label className={lbl}>
               Sugestões
             </label>
             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -479,10 +420,10 @@ export const Financial = () => {
                   key={sug.name}
                   onClick={() => { setNcName(sug.name); setNcColor(sug.color); }}
                   className={cn(
-                    "px-2 py-1 text-[10px] rounded-md border transition-all cursor-pointer",
+                    "px-2.5 py-1 text-[10px] rounded-md border transition-all cursor-pointer font-medium",
                     ncName === sug.name
-                      ? "bg-violet-500/20 border-violet-500/50 text-violet-600"
-                      : dark ? "bg-slate-700 border-slate-600 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-600"
+                      ? "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
+                      : "bg-surface-tertiary border-border-secondary text-text-secondary hover:text-text-primary"
                   )}
                 >
                   {sug.name}
@@ -491,44 +432,40 @@ export const Financial = () => {
             </div>
           </div>
           <div>
-            <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>
+            <label className={lbl}>
               Nome do Centro de Custo
             </label>
             <input
               value={ncName}
               onChange={(e) => setNcName(e.target.value)}
-              className={cn(
-                "w-full px-3 py-2.5 rounded-xl text-xs border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50",
-                dark ? "bg-slate-700 border-slate-600 text-white" : "bg-slate-50 border-slate-200"
-              )}
+              className={inpFull}
               placeholder="Ex: Manutenção"
               autoFocus
             />
           </div>
           <div>
-            <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>
+            <label className={lbl}>
               Cor
             </label>
-            <input
-              type="color"
-              value={ncColor}
-              onChange={(e) => setNcColor(e.target.value)}
-              className="w-full h-10 rounded-xl cursor-pointer border-0 p-0"
-            />
+            <div className="flex gap-2 flex-wrap">
+              {CCC.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setNcColor(c)}
+                  className={cn(
+                    "w-6 h-6 rounded-full cursor-pointer transition-transform hover:scale-110 border-2",
+                    ncColor === c ? "border-text-primary" : "border-transparent"
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2 mt-5">
           <button
             onClick={confirmAddCC}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer"
+            className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
-            Criar
-          </button>
-          <button
-            onClick={() => setShowAddCC(false)}
-            className={cn("px-4 py-2.5 rounded-xl text-xs border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}
-          >
-            Cancelar
+            Criar Centro de Custo
           </button>
         </div>
       </Modal>
@@ -538,25 +475,31 @@ export const Financial = () => {
         open={!!editCC}
         onOpenChange={(v) => { if (!v) setEditCC(null); }}
         title="Editar Centro de Custo"
-        dark={dark}
         size="sm"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <label className={lbl}>Nome</label>
             <input value={ecName} onChange={(e) => setEcName(e.target.value)} className={inpFull} autoFocus />
           </div>
           <div>
             <label className={lbl}>Cor</label>
-            <input type="color" value={ecColor} onChange={(e) => setEcColor(e.target.value)} className="w-full h-10 rounded-xl cursor-pointer border-0 p-0" />
+            <div className="flex gap-2 flex-wrap">
+              {CCC.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setEcColor(c)}
+                  className={cn(
+                    "w-6 h-6 rounded-full cursor-pointer transition-transform hover:scale-110 border-2",
+                    ecColor === c ? "border-text-primary" : "border-transparent"
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={saveEditCC} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer">
+          <button onClick={saveEditCC} className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2">
             Salvar
-          </button>
-          <button onClick={() => setEditCC(null)} className={cn("px-4 py-2.5 rounded-xl text-xs border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}>
-            Cancelar
           </button>
         </div>
       </Modal>
@@ -566,10 +509,9 @@ export const Financial = () => {
         open={!!editEI}
         onOpenChange={(v) => { if (!v) setEditEI(null); }}
         title="Editar Item de Despesa"
-        dark={dark}
         size="sm"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <label className={lbl}>Nome</label>
             <input value={eiName} onChange={(e) => setEiName(e.target.value)} className={inpFull} autoFocus />
@@ -580,30 +522,25 @@ export const Financial = () => {
               <button
                 onClick={() => setEiType("F")}
                 className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-semibold border-2 cursor-pointer",
+                  "flex-1 py-2.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors",
                   eiType === "F"
-                    ? dark ? "bg-blue-900/30 text-blue-400 border-blue-500" : "bg-blue-50 text-blue-600 border-blue-300"
-                    : dark ? "bg-slate-700 text-slate-400 border-slate-600 opacity-40" : "bg-slate-100 text-slate-500 border-slate-200 opacity-40"
+                    ? "bg-accent-blue/10 text-accent-blue border-accent-blue/30"
+                    : "bg-surface-tertiary text-text-secondary border-transparent hover:text-text-primary"
                 )}
               >Fixo</button>
               <button
                 onClick={() => setEiType("V")}
                 className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-semibold border-2 cursor-pointer",
+                  "flex-1 py-2.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors",
                   eiType === "V"
-                    ? dark ? "bg-amber-900/30 text-amber-400 border-amber-500" : "bg-amber-50 text-amber-600 border-amber-300"
-                    : dark ? "bg-slate-700 text-slate-400 border-slate-600 opacity-40" : "bg-slate-100 text-slate-500 border-slate-200 opacity-40"
+                    ? "bg-accent-amber/10 text-accent-amber border-accent-amber/30"
+                    : "bg-surface-tertiary text-text-secondary border-transparent hover:text-text-primary"
                 )}
               >Variável</button>
             </div>
           </div>
-        </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={saveEditEI} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer">
+          <button onClick={saveEditEI} className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2">
             Salvar
-          </button>
-          <button onClick={() => setEditEI(null)} className={cn("px-4 py-2.5 rounded-xl text-xs border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}>
-            Cancelar
           </button>
         </div>
       </Modal>
@@ -617,7 +554,6 @@ export const Financial = () => {
         confirmLabel={confirmState.confirmLabel}
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
-        dark={dark}
       />
     </div>
   );

@@ -92,7 +92,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [data, setData] = useState<DashboardData | null>(null);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem("mf_dark_mode");
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("mf_dark_mode", JSON.stringify(dark));
+  }, [dark]);
   const [page, setPage] = useState("dash");
   const [sideCol, setSideCol] = useState(false);
   const [curMo, setCurMo] = useState(new Date().getMonth());

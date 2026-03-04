@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export const Sidebar = () => {
-  const { page, setPage, sideCol, setSideCol, dark } = useData();
+  const { page, setPage, sideCol, setSideCol } = useData();
 
   const items = [
     { id: "dash", icon: LayoutDashboard, label: "Dashboard" },
@@ -28,56 +28,49 @@ export const Sidebar = () => {
   return (
     <aside
       className={cn(
-        "h-screen flex flex-col transition-all duration-300 flex-shrink-0 border-r",
-        sideCol ? "w-16" : "w-56",
-        dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+        "h-screen flex flex-col transition-all duration-300 flex-shrink-0 border-r border-border-primary bg-surface-primary",
+        sideCol ? "w-16" : "w-56"
       )}
     >
       <div
         className={cn(
-          "h-14 flex items-center gap-2.5 border-b",
-          sideCol ? "justify-center" : "px-4",
-          dark ? "border-slate-800" : "border-slate-100"
+          "h-14 flex items-center gap-3 border-b border-border-primary",
+          sideCol ? "justify-center" : "px-5"
         )}
       >
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white flex-shrink-0">
-          <Music size={16} />
+        <div className="flex items-center justify-center text-text-primary flex-shrink-0">
+          <Music size={18} strokeWidth={2.5} />
         </div>
         {!sideCol && (
-          <span className={cn("font-bold text-sm whitespace-nowrap", dark ? "text-white" : "text-slate-900")}>
-            DashFinance
+          <span className="font-semibold text-sm tracking-tight text-text-primary">
+            MusicFinance
           </span>
         )}
       </div>
-      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
         {items.map((it) => (
           <button
             key={it.id}
             onClick={() => setPage(it.id)}
             className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all border-none cursor-pointer text-left",
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all border-none cursor-pointer text-left",
               page === it.id
-                ? dark
-                  ? "bg-violet-500/15 text-violet-400"
-                  : "bg-violet-50 text-violet-700"
-                : dark
-                ? "text-slate-400 hover:text-white hover:bg-slate-800"
-                : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
+                ? "bg-surface-tertiary text-text-primary"
+                : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary/50",
               sideCol && "justify-center px-0"
             )}
             title={sideCol ? it.label : undefined}
           >
-            <it.icon size={18} className="flex-shrink-0" />
+            <it.icon size={16} strokeWidth={page === it.id ? 2.5 : 2} className="flex-shrink-0" />
             {!sideCol && <span>{it.label}</span>}
           </button>
         ))}
       </nav>
-      <div className={cn("px-2 py-3 border-t", dark ? "border-slate-800" : "border-slate-100")}>
+      <div className="px-2 py-3 border-t border-border-primary">
         <button
           onClick={() => setSideCol(!sideCol)}
           className={cn(
-            "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all border-none cursor-pointer text-left",
-            dark ? "text-slate-500 hover:bg-slate-800" : "text-slate-400 hover:bg-slate-50",
+            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all border-none cursor-pointer text-left text-text-tertiary hover:bg-surface-tertiary hover:text-text-secondary",
             sideCol && "justify-center px-0"
           )}
         >

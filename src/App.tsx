@@ -19,11 +19,19 @@ import { Loader2, Music } from "lucide-react";
 const AppContent = () => {
   const { page, dark } = useData();
 
+  React.useEffect(() => {
+    if (dark) {
+      document.documentElement.classList.remove("light");
+    } else {
+      document.documentElement.classList.add("light");
+    }
+  }, [dark]);
+
   return (
     <div
       className={cn(
         "h-screen flex overflow-hidden transition-colors duration-300",
-        dark ? "bg-slate-900" : "bg-slate-50"
+        "bg-surface-primary text-text-primary"
       )}
     >
       <Sidebar />
@@ -43,11 +51,9 @@ const AppContent = () => {
 };
 
 const LoadingScreen = () => (
-  <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 mb-4">
-      <Music className="w-8 h-8 text-white" />
-    </div>
-    <Loader2 size={24} className="animate-spin text-violet-400 mt-4" />
+  <div className="min-h-screen flex flex-col items-center justify-center bg-surface-primary">
+    <h1 className="text-2xl font-bold tracking-tight text-text-primary mb-4 font-sans uppercase">MF</h1>
+    <Loader2 size={24} className="animate-spin text-accent-blue" />
   </div>
 );
 

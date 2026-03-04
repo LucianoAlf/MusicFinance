@@ -30,12 +30,12 @@ import {
 
 const SITUATIONS = ["Ativo", "Evadido", "Trancado"] as const;
 
-const sitStyle = (sit: string, dark: boolean) => {
+const sitStyle = (sit: string) => {
   switch (sit) {
-    case "Ativo":    return dark ? "bg-emerald-900/30 text-emerald-400" : "bg-emerald-50 text-emerald-700";
-    case "Evadido":  return dark ? "bg-rose-900/30 text-rose-400"       : "bg-rose-50 text-rose-700";
-    case "Trancado": return dark ? "bg-amber-900/30 text-amber-400"     : "bg-amber-50 text-amber-700";
-    default:         return dark ? "bg-slate-700 text-slate-400"        : "bg-slate-100 text-slate-500";
+    case "Ativo":    return "bg-accent-green/10 text-accent-green";
+    case "Evadido":  return "bg-accent-red/10 text-accent-red";
+    case "Trancado": return "bg-accent-amber/10 text-accent-amber";
+    default:         return "bg-surface-tertiary text-text-secondary";
   }
 };
 
@@ -56,7 +56,7 @@ const DAY_OPTIONS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map((d) => ({ val
 export const Professors = () => {
   const {
     data, instruments, curMo, setCurMo, selProf, setSelProf, selPay, setSelPay,
-    dark, viewKpis,
+    viewKpis,
     handleAddProfessor, handleUpdateProfessor, handleDeleteProfessor,
     handleAddStudent, handleUpdateStudent, handleDeleteStudent,
     handleConfirmPayment, handleWaivePayment, handleRevertPayment,
@@ -115,22 +115,22 @@ export const Professors = () => {
 
   if (!data) return null;
 
-  // Situation options with colors (depends on dark)
+  // Situation options with colors
   const situationOptions = SITUATIONS.map((sit) => ({
     value: sit,
     label: sit,
-    color: sitStyle(sit, dark),
+    color: sitStyle(sit),
   }));
 
   const cd = cn(
-    "rounded-2xl p-4 shadow-sm border",
-    dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100"
+    "rounded-xl p-4 shadow-sm border",
+    "bg-surface-secondary border-border-primary"
   );
   const inp = cn(
-    "w-full px-3 py-2.5 rounded-xl text-xs border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50",
-    dark ? "bg-slate-700 border-slate-600 text-white" : "bg-slate-50 border-slate-200"
+    "w-full px-3 py-2.5 rounded-lg text-xs border bg-surface-secondary border-border-secondary text-text-primary",
+    "focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150"
   );
-  const lbl = cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500");
+  const lbl = "text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider";
 
   let _tP = data.professors.length,
     _tA = 0,
@@ -264,8 +264,8 @@ export const Professors = () => {
       <div className="space-y-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Professores</h1>
-            <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">Professores</h1>
+            <p className="text-xs mt-1 text-text-secondary">
               {data.professors.length} profs · {data.professors.reduce((s, p) => s + p.students.length, 0)} alunos · {MF[curMo]}
             </p>
           </div>
@@ -309,31 +309,32 @@ export const Professors = () => {
             return (
               <div key={p.id} onClick={() => { setSelProf(p.id); setSelPay(null); }}
                 className={cn("rounded-xl p-3 cursor-pointer transition-all border",
-                  selProf === p.id ? (dark ? "bg-violet-500/15 border-violet-500/30" : "bg-violet-50 border-violet-200 ring-1 ring-violet-100")
-                    : (dark ? "bg-slate-800/60 border-slate-700/50 hover:bg-slate-800" : "bg-white border-slate-100 hover:bg-slate-50")
+                  selProf === p.id 
+                    ? "bg-surface-tertiary border-border-hover ring-1 ring-border-hover" 
+                    : "bg-surface-secondary border-border-primary hover:bg-surface-tertiary/50 hover:border-border-secondary"
                 )}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center",
-                      selProf === p.id ? "bg-gradient-to-br from-violet-500 to-indigo-600 text-white" : (dark ? "bg-slate-700 text-slate-500" : "bg-slate-100 text-slate-400"))}>
+                      selProf === p.id ? "bg-accent-blue text-surface-primary" : "bg-surface-tertiary text-text-tertiary")}>
                       <Music size={14} />
                     </div>
                     <div>
-                      <p className={cn("text-xs font-semibold", dark ? "text-white" : "text-slate-900")}>{p.name}</p>
-                      <p className={cn("text-[10px]", dark ? "text-slate-400" : "text-slate-500")}>{p.instruments.length > 0 ? p.instruments.map(i => i.name).join(", ") : p.instrument} · {p.students.length} al. · {pay} pag.</p>
+                      <p className="text-xs font-semibold text-text-primary">{p.name}</p>
+                      <p className="text-[10px] text-text-secondary">{p.instruments.length > 0 ? p.instruments.map(i => i.name).join(", ") : p.instrument} · {p.students.length} al. · {pay} pag.</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex items-center gap-1 justify-end">
-                      <p className={cn("text-xs font-bold", dark ? "text-emerald-400" : "text-emerald-600")}>{brl(rev)}</p>
+                      <p className="text-xs font-mono font-bold text-accent-green">{brl(rev)}</p>
                       {trendProf != null && (
-                        <span className={cn("text-[9px] flex items-center", trendUp ? (dark ? "text-emerald-400" : "text-emerald-600") : (dark ? "text-rose-400" : "text-rose-600"))}>
+                        <span className={cn("text-[9px] flex items-center font-mono", trendUp ? "text-accent-green" : "text-accent-red")}>
                           {trendUp ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}{Math.abs(trendProf).toFixed(0)}%
                         </span>
                       )}
                     </div>
-                    <p className={cn("text-[10px]", pp > 0.45 ? "text-rose-500 font-semibold" : (dark ? "text-slate-400" : "text-slate-500"))}>{pct(pp)} folha</p>
-                    <p className={cn("text-[9px]", dark ? "text-teal-400" : "text-teal-600")}>Ticket: {brl(ticketProf)}</p>
+                    <p className={cn("text-[10px]", pp > 0.45 ? "text-accent-red font-semibold" : "text-text-secondary")}>{pct(pp)} folha</p>
+                    <p className="text-[9px] text-accent-blue font-mono font-medium">Ticket: {brl(ticketProf)}</p>
                   </div>
                 </div>
               </div>
@@ -343,50 +344,50 @@ export const Professors = () => {
 
         <div className="lg:col-span-2">
           {prof ? (
-            <div className={cd}>
+            <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25">
-                    <Music size={18} />
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-surface-tertiary flex items-center justify-center text-text-tertiary border border-border-secondary">
+                    <Music size={20} strokeWidth={2} />
                   </div>
                   <div>
                     <button
                       onClick={() => openEditProf(prof)}
-                      className={cn("font-bold text-sm border-none bg-transparent cursor-pointer p-0 text-left transition-colors", dark ? "text-white hover:text-violet-400" : "text-slate-900 hover:text-violet-600")}
+                      className="font-bold text-lg border-none bg-transparent cursor-pointer p-0 text-left transition-colors text-text-primary hover:text-accent-blue"
                     >{prof.name}</button>
-                    <p className={cn("text-[11px]", dark ? "text-slate-400" : "text-slate-500")}>
+                    <p className="text-[11px] text-text-tertiary tracking-wide mt-0.5">
                       {prof.instruments.length > 0 ? prof.instruments.map(i => i.name).join(", ") : prof.instrument} · R$ {prof.costPerStudent}/aluno · {prof.students.length} alunos · {prof.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length} pagantes
                     </p>
-                    <p className={cn("text-[10px] font-semibold", dark ? "text-emerald-400" : "text-emerald-600")}>
+                    <p className="text-[11px] font-mono font-medium text-accent-green mt-1">
                       Receita {MS[curMo]}: {brl(prof.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0))}
-                      <span className={cn("ml-2", dark ? "text-teal-400" : "text-teal-600")}>
+                      <span className="ml-3 text-accent-blue">
                         Ticket: {brl((() => { const payP = prof.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length; const revP = prof.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0); return payP > 0 ? revP / payP : 0; })())}
                       </span>
                     </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-600 text-[11px] font-semibold hover:bg-emerald-500/20 transition-all border border-emerald-500/20 cursor-pointer">
+                  <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-tertiary text-text-primary text-[11px] font-medium hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer">
                     <UserPlus size={14} /> Novo Aluno
                   </button>
-                  <button onClick={() => removeProf(prof.id)} className="p-2 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-all border border-rose-500/20 cursor-pointer">
+                  <button onClick={() => removeProf(prof.id)} className="p-2 rounded-lg bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-all border border-border-secondary cursor-pointer">
                     <Trash2 size={14} />
                   </button>
                 </div>
               </div>
 
-              <div className="overflow-auto max-h-[58vh]">
-                <table className="w-full text-[11px]">
-                  <thead className={cn("sticky top-0 z-10", dark ? "bg-slate-800" : "bg-white")}>
-                    <tr className={cn("border-b", dark ? "text-slate-400 border-slate-700" : "text-slate-500 border-slate-200")}>
-                      <th className="text-left py-2.5 px-2 font-semibold">Nome</th>
-                      <th className="text-left py-2.5 px-1 w-16 font-semibold">Curso</th>
-                      <th className="text-center py-2.5 px-1 w-14 font-semibold">Perm.</th>
-                      <th className="text-center py-2.5 px-1 w-12 font-semibold">Hora</th>
-                      <th className="text-center py-2.5 px-1 w-10 font-semibold">Dia</th>
-                      <th className="text-left py-2.5 px-1 w-20 font-semibold">Situação</th>
-                      <th className="w-10 text-center py-2.5 font-semibold">Pgto</th>
-                      <th className="w-8 py-2.5"></th>
+              <div className="overflow-auto max-h-[58vh] mt-6">
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0 z-10 bg-surface-secondary">
+                    <tr>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-2 border-b border-border-primary font-medium">Nome</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-16 border-b border-border-primary font-medium">Curso</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-14 text-center border-b border-border-primary font-medium">Perm.</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-12 text-center border-b border-border-primary font-medium">Hora</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-10 text-center border-b border-border-primary font-medium">Dia</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-24 border-b border-border-primary font-medium">Situação</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 w-10 text-center border-b border-border-primary font-medium">Pgto</th>
+                      <th className="pb-2 w-8 border-b border-border-primary"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -394,77 +395,73 @@ export const Professors = () => {
                       const isInactive = s.situation !== "Ativo";
                       return (
                         <React.Fragment key={s.id}>
-                          <tr className={cn("border-t transition-colors", dark ? "border-slate-700/30 hover:bg-slate-700/20" : "border-slate-100 hover:bg-slate-50")}>
-                            <td className={cn("py-2 px-2", isInactive && "opacity-50")}>
+                          <tr className={cn("border-t border-border-primary transition-colors hover:bg-surface-tertiary", isInactive && "opacity-60")}>
+                            <td className="py-2.5 px-2">
                               <button
                                 onClick={() => openEditStudent(s)}
                                 className={cn(
-                                  "border-none bg-transparent cursor-pointer p-0 text-left font-medium transition-colors",
-                                  dark ? "text-white hover:text-violet-400" : "text-slate-800 hover:text-violet-600",
-                                  s.situation === "Evadido" && "line-through"
+                                  "border-none bg-transparent cursor-pointer p-0 text-left font-medium transition-colors text-text-primary hover:text-accent-blue",
+                                  s.situation === "Evadido" && "line-through text-text-tertiary"
                                 )}
                               >
                                 {s.name}
                               </button>
                             </td>
-                            <td className={cn("py-2 px-1 text-left text-[10px]", dark ? "text-slate-400" : "text-slate-500", isInactive && "opacity-50")}>
+                            <td className="py-2.5 px-1 text-left text-[11px] text-text-secondary">
                               {s.instrumentName || "—"}
                             </td>
-                            <td className={cn("py-2 px-1 text-center text-[10px]", dark ? "text-slate-500" : "text-slate-400", isInactive && "opacity-50")}>
+                            <td className="py-2.5 px-1 text-center text-[11px] text-text-secondary">
                               {calcPermanencia(s.enrollmentDate)}
                             </td>
-                            <td className={cn("py-2 px-1 text-center", dark ? "text-slate-400" : "text-slate-500", isInactive && "opacity-50")}>{s.hour || "—"}</td>
-                            <td className={cn("py-2 px-1 text-center", dark ? "text-slate-400" : "text-slate-500", isInactive && "opacity-50")}>{s.day || "—"}</td>
-                            <td className="py-1.5 px-1 text-left">
+                            <td className="py-2.5 px-1 text-center text-[11px] text-text-secondary">{s.hour || "—"}</td>
+                            <td className="py-2.5 px-1 text-center text-[11px] text-text-secondary">{s.day || "—"}</td>
+                            <td className="py-2 px-1 text-left">
                               <Select
                                 value={s.situation || "Ativo"}
                                 onValueChange={(v) => changeSituation(s.id, v)}
                                 options={situationOptions}
-                                dark={dark}
                                 compact
                               />
                             </td>
-                            <td className="py-2 text-center">
+                            <td className="py-2.5 text-center">
                               <button onClick={() => setSelPay(selPay === s.id ? null : s.id)}
-                                className={cn("px-2 py-1 rounded-lg text-[10px] font-medium transition-all border-none cursor-pointer",
-                                  selPay === s.id ? (dark ? "bg-violet-500/20 text-violet-400" : "bg-violet-100 text-violet-700") : (dark ? "bg-slate-700 text-slate-400" : "bg-slate-100 text-slate-500"))}>
-                                {selPay === s.id ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                                className={cn("p-1.5 rounded-lg text-[10px] font-medium transition-all border-none cursor-pointer",
+                                  selPay === s.id ? "bg-surface-tertiary text-text-primary" : "bg-transparent text-text-tertiary hover:bg-surface-tertiary")}>
+                                {selPay === s.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                               </button>
                             </td>
-                            <td className="py-2 text-center">
-                              <button onClick={() => removeStudent(prof.id, s.id)} className="p-1 rounded-lg text-rose-400 hover:text-rose-600 transition-all border-none bg-transparent cursor-pointer">
-                                <X size={12} />
+                            <td className="py-2.5 text-center">
+                              <button onClick={() => removeStudent(prof.id, s.id)} className="p-1.5 rounded-lg text-text-tertiary hover:text-accent-red hover:bg-accent-red/10 transition-all border-none bg-transparent cursor-pointer">
+                                <X size={14} />
                               </button>
                             </td>
                           </tr>
                           {selPay === s.id && (
                             <tr>
                               <td colSpan={8}>
-                                <div className={cn("p-3 my-1 rounded-xl border", dark ? "bg-slate-700/40 border-slate-600/30" : "bg-gradient-to-r from-violet-50 to-indigo-50 border-violet-100")}>
-                                  <p className={cn("text-[10px] font-semibold mb-2 flex items-center gap-1.5", dark ? "text-violet-400" : "text-violet-700")}>
+                                <div className="p-4 my-2 rounded-xl border border-border-secondary bg-surface-primary">
+                                  <p className="text-[10px] font-semibold mb-3 uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
                                     <Calendar size={12} /> Pagamentos {data.config.year}
                                   </p>
-                                  <div className="grid grid-cols-12 gap-1.5">
+                                  <div className="grid grid-cols-12 gap-2">
                                     {MS.map((m, mi) => {
                                       const pm = s.payments[mi];
                                       const ds = getDisplayStatus(pm, mi);
                                       const cellColor = {
-                                        PAID: dark ? "bg-emerald-900/25 border-emerald-600/40 text-emerald-400" : "bg-emerald-50 border-emerald-300 text-emerald-700",
-                                        PENDING: dark ? "bg-amber-900/25 border-amber-600/40 text-amber-400" : "bg-amber-50 border-amber-300 text-amber-700",
-                                        LATE: dark ? "bg-rose-900/25 border-rose-600/40 text-rose-400" : "bg-rose-50 border-rose-300 text-rose-600",
-                                        WAIVED: dark ? "bg-slate-700/50 border-slate-600/40 text-slate-500" : "bg-slate-100 border-slate-200 text-slate-400",
-                                        FUTURE: dark ? "bg-slate-700/30 border-slate-600/30 text-slate-500" : "bg-slate-50 border-slate-200 text-slate-400",
+                                        PAID: "bg-accent-green/10 text-accent-green",
+                                        PENDING: "bg-accent-amber/15 text-accent-amber",
+                                        LATE: "bg-accent-red/10 text-accent-red",
+                                        WAIVED: "bg-transparent text-text-tertiary line-through",
+                                        FUTURE: "bg-transparent text-text-tertiary",
                                       }[ds];
-                                      const statusLabel = { PAID: "Pago", PENDING: "Pend.", LATE: "Atraso", WAIVED: "Isento", FUTURE: "Prev." }[ds];
                                       return (
                                         <div key={m} className="text-center">
-                                          <label className={cn("text-[9px] font-semibold", dark ? "text-slate-400" : "text-slate-500", mi === curMo && (dark ? "text-violet-400" : "text-violet-600"))}>{m}</label>
+                                          <label className={cn("text-[9px] font-medium uppercase tracking-wider block mb-1.5", mi === curMo ? "text-text-primary font-bold" : "text-text-secondary")}>{m}</label>
                                           <button
                                             onClick={() => openPayPopover(prof.id, s, mi)}
-                                            className={cn("w-full text-center text-[10px] px-0.5 py-1 rounded-lg border-2 cursor-pointer transition-all", cellColor, mi === curMo && (dark ? "ring-1 ring-violet-500/50" : "ring-1 ring-violet-400"))}
+                                            className={cn("w-full text-center py-2 rounded-lg border-none cursor-pointer transition-all hover:opacity-80", cellColor, mi === curMo && "ring-1 ring-border-hover")}
                                           >
-                                            <div className="font-semibold">{pm ? (ds === "WAIVED" ? "—" : pm.amount) : "—"}</div>
-                                            <div className="text-[8px] opacity-75">{statusLabel}</div>
+                                            <div className="font-mono font-medium text-[11px]">{pm ? (ds === "WAIVED" ? "—" : pm.amount) : "—"}</div>
                                           </button>
                                         </div>
                                       );
@@ -482,9 +479,9 @@ export const Professors = () => {
               </div>
             </div>
           ) : (
-            <div className={cn(cd, "flex flex-col items-center justify-center h-64 gap-3")}>
-              <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center", dark ? "bg-slate-700 text-slate-500" : "bg-slate-100 text-slate-300")}><Users size={28} /></div>
-              <p className={cn("text-sm", dark ? "text-slate-500" : "text-slate-400")}>Selecione um professor à esquerda</p>
+            <div className="flex flex-col items-center justify-center h-64 gap-4 rounded-xl border border-border-primary bg-surface-secondary">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-surface-tertiary text-text-tertiary border border-border-secondary"><Users size={32} strokeWidth={1.5} /></div>
+              <p className="text-sm font-medium text-text-secondary">Selecione um professor à esquerda</p>
             </div>
           )}
         </div>
@@ -495,10 +492,9 @@ export const Professors = () => {
         open={showAddProf}
         onOpenChange={(v) => { if (!v) setShowAddProf(false); }}
         title="Novo Professor"
-        dark={dark}
         size="sm"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <label className={lbl}>Nome</label>
             <input value={npName} onChange={(e) => setNpName(e.target.value)} className={inp} placeholder="Ex: João Silva" autoFocus />
@@ -509,9 +505,9 @@ export const Professors = () => {
               {npInstIds.map(iid => {
                 const inst = instruments.find(i => i.id === iid);
                 return (
-                  <span key={iid} className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium", dark ? "bg-violet-500/20 text-violet-300 border border-violet-500/30" : "bg-violet-100 text-violet-700 border border-violet-200")}>
+                  <span key={iid} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium bg-surface-tertiary text-text-primary border border-border-secondary">
                     {inst?.name}
-                    <button onClick={() => setNpInstIds(prev => prev.filter(id => id !== iid))} className="border-none bg-transparent cursor-pointer p-0 text-current opacity-60 hover:opacity-100"><X size={10} /></button>
+                    <button onClick={() => setNpInstIds(prev => prev.filter(id => id !== iid))} className="border-none bg-transparent cursor-pointer p-0 text-text-tertiary hover:text-accent-red"><X size={10} /></button>
                   </span>
                 );
               })}
@@ -521,9 +517,8 @@ export const Professors = () => {
               onValueChange={(v) => { if (v && !npInstIds.includes(v)) setNpInstIds(prev => [...prev, v]); }}
               options={instruments.filter(i => !npInstIds.includes(i.id)).map(i => ({ value: i.id, label: i.name }))}
               placeholder="Selecionar instrumento..."
-              dark={dark}
             />
-            <div className="flex gap-1.5 mt-1.5">
+            <div className="flex gap-2 mt-2">
               <input
                 value={npNewInst}
                 onChange={(e) => setNpNewInst(e.target.value)}
@@ -543,9 +538,9 @@ export const Professors = () => {
                     if (created) { setNpInstIds(prev => [...prev, created.id]); setNpNewInst(""); }
                   }
                 }}
-                className={cn("px-2 py-1.5 rounded-lg text-[10px] font-semibold border-none cursor-pointer", dark ? "bg-slate-600 text-slate-300 hover:bg-slate-500" : "bg-slate-200 text-slate-600 hover:bg-slate-300")}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary hover:bg-surface-tertiary/80 transition-colors"
               >
-                <Plus size={12} />
+                <Plus size={14} />
               </button>
             </div>
           </div>
@@ -554,9 +549,9 @@ export const Professors = () => {
             <input type="number" value={npCost} onChange={(e) => setNpCost(e.target.value)} className={inp} />
           </div>
         </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={confirmAddProf} disabled={!npName.trim() || npInstIds.length === 0} className={cn("flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer", (!npName.trim() || npInstIds.length === 0) && "opacity-50 cursor-not-allowed")}>Cadastrar</button>
-          <button onClick={() => setShowAddProf(false)} className={cn("px-4 py-2.5 rounded-xl text-xs font-medium border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}>Cancelar</button>
+        <div className="flex gap-2 mt-6">
+          <button onClick={() => setShowAddProf(false)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
+          <button onClick={confirmAddProf} disabled={!npName.trim() || npInstIds.length === 0} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer">Cadastrar</button>
         </div>
       </Modal>
 
@@ -565,13 +560,12 @@ export const Professors = () => {
         open={!!showAddStud}
         onOpenChange={(v) => { if (!v) { setShowAddStud(null); setNsExisting(false); setNsPersonId(""); } }}
         title="Novo Aluno"
-        dark={dark}
         size="sm"
       >
-        <div className="space-y-3">
-          <label className={cn("flex items-center gap-2 cursor-pointer select-none py-1")}>
-            <input type="checkbox" checked={nsExisting} onChange={(e) => { setNsExisting(e.target.checked); if (!e.target.checked) { setNsPersonId(""); setNsName(""); } }} className="accent-violet-500 w-3.5 h-3.5" />
-            <span className={cn("text-[11px] font-medium", dark ? "text-slate-300" : "text-slate-600")}>Aluno já matriculado em outro curso</span>
+        <div className="space-y-4">
+          <label className="flex items-center gap-2 cursor-pointer select-none py-1">
+            <input type="checkbox" checked={nsExisting} onChange={(e) => { setNsExisting(e.target.checked); if (!e.target.checked) { setNsPersonId(""); setNsName(""); } }} className="accent-accent-blue w-3.5 h-3.5" />
+            <span className="text-[11px] font-medium text-text-primary">Aluno já matriculado em outro curso</span>
           </label>
           {nsExisting ? (
             <div>
@@ -600,7 +594,6 @@ export const Professors = () => {
                   return opts;
                 })()}
                 placeholder="Selecionar aluno..."
-                dark={dark}
               />
             </div>
           ) : (
@@ -620,7 +613,6 @@ export const Professors = () => {
                 value={nsDay}
                 onValueChange={setNsDay}
                 options={DAY_OPTIONS}
-                dark={dark}
               />
             </div>
           </div>
@@ -636,7 +628,6 @@ export const Professors = () => {
                 return filtered.map(i => ({ value: i.id, label: i.name }));
               })()}
               placeholder="Selecionar curso..."
-              dark={dark}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -646,13 +637,13 @@ export const Professors = () => {
             </div>
             <div>
               <label className={lbl}>Data de Matrícula</label>
-              <DatePicker value={nsEnroll} onChange={setNsEnroll} dark={dark} />
+              <DatePicker value={nsEnroll} onChange={setNsEnroll} />
             </div>
           </div>
         </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={() => showAddStud && confirmAddStudent(showAddStud)} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer">Cadastrar Aluno</button>
-          <button onClick={() => setShowAddStud(null)} className={cn("px-4 py-2.5 rounded-xl text-xs font-medium border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}>Cancelar</button>
+        <div className="flex gap-2 mt-6">
+          <button onClick={() => setShowAddStud(null)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
+          <button onClick={() => showAddStud && confirmAddStudent(showAddStud)} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">Cadastrar Aluno</button>
         </div>
       </Modal>
 
@@ -661,10 +652,9 @@ export const Professors = () => {
         open={!!editStudent}
         onOpenChange={(v) => { if (!v) setEditStudent(null); }}
         title="Detalhes do Aluno"
-        dark={dark}
         size="md"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <label className={lbl}>Nome</label>
             <input value={esName} onChange={(e) => setEsName(e.target.value)} className={inp} />
@@ -676,7 +666,6 @@ export const Professors = () => {
                 value={esDay || "Seg"}
                 onValueChange={setEsDay}
                 options={DAY_OPTIONS}
-                dark={dark}
               />
             </div>
             <div>
@@ -691,7 +680,6 @@ export const Professors = () => {
                 value={esSit || "Ativo"}
                 onValueChange={setEsSit}
                 options={situationOptions}
-                dark={dark}
               />
             </div>
             <div>
@@ -701,7 +689,6 @@ export const Professors = () => {
                 onValueChange={setEsInstId}
                 options={instruments.map(i => ({ value: i.id, label: i.name }))}
                 placeholder="Selecionar..."
-                dark={dark}
               />
             </div>
           </div>
@@ -712,29 +699,29 @@ export const Professors = () => {
             </div>
             <div>
               <label className={lbl}>Data de Matrícula</label>
-              <DatePicker value={esEnroll} onChange={setEsEnroll} dark={dark} />
+              <DatePicker value={esEnroll} onChange={setEsEnroll} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Data de Saída</label>
-              <DatePicker value={editStudent?.exitDate || ""} onChange={() => {}} readOnly dark={dark} />
+              <DatePicker value={editStudent?.exitDate || ""} onChange={() => {}} readOnly disabled={esSit === "Ativo"} />
             </div>
           </div>
-          <div className={cn("rounded-lg p-3 border", dark ? "bg-slate-700/40 border-slate-600/30" : "bg-slate-50 border-slate-200")}>
+          <div className="rounded-lg p-3 border border-border-secondary bg-surface-tertiary">
             <div className="flex items-center justify-between">
-              <span className={cn("text-[10px] font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Tempo de Permanência</span>
-              <span className={cn("text-xs font-bold", dark ? "text-cyan-400" : "text-cyan-600")}>{calcPermanencia(esEnroll || editStudent?.enrollmentDate)}</span>
+              <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Tempo de Permanência</span>
+              <span className="text-xs font-mono font-medium text-accent-blue">{calcPermanencia(esEnroll || editStudent?.enrollmentDate)}</span>
             </div>
-            <div className="flex items-center justify-between mt-1">
-              <span className={cn("text-[10px] font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Professor</span>
-              <span className={cn("text-xs", dark ? "text-slate-300" : "text-slate-600")}>{prof?.name} ({prof?.instruments.length > 0 ? prof.instruments.map(i => i.name).join(", ") : prof?.instrument})</span>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Professor</span>
+              <span className="text-[11px] text-text-primary">{prof?.name} ({prof?.instruments.length > 0 ? prof.instruments.map(i => i.name).join(", ") : prof?.instrument})</span>
             </div>
           </div>
         </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={saveEditStudent} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-bold shadow-lg border-none cursor-pointer">Salvar</button>
-          <button onClick={() => setEditStudent(null)} className={cn("px-4 py-2.5 rounded-xl text-xs font-medium border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600")}>Cancelar</button>
+        <div className="flex gap-2 mt-6">
+          <button onClick={() => setEditStudent(null)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
+          <button onClick={saveEditStudent} className="flex-1 py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">Salvar Alterações</button>
         </div>
       </Modal>
 
@@ -743,7 +730,6 @@ export const Professors = () => {
         open={!!editProf}
         onOpenChange={(v) => { if (!v) setEditProf(null); }}
         title="Editar Professor"
-        dark={dark}
         size="md"
       >
         {editProf && (() => {
@@ -764,14 +750,14 @@ export const Professors = () => {
                 <label className={lbl}>Instrumentos</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {ep.instruments.map((inst) => (
-                    <span key={inst.id} className={cn("flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold", dark ? "bg-violet-900/30 text-violet-400" : "bg-violet-100 text-violet-700")}>
+                    <span key={inst.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium bg-surface-tertiary text-text-primary border border-border-secondary">
                       {inst.name}
-                      <button onClick={() => handleRemoveProfessorInstrument(editProf, inst.id)} className="border-none bg-transparent cursor-pointer p-0 text-current opacity-60 hover:opacity-100">
+                      <button onClick={() => handleRemoveProfessorInstrument(editProf, inst.id)} className="border-none bg-transparent cursor-pointer p-0 text-text-tertiary hover:text-accent-red">
                         <X size={10} />
                       </button>
                     </span>
                   ))}
-                  {ep.instruments.length === 0 && <span className={cn("text-[10px]", dark ? "text-slate-500" : "text-slate-400")}>Nenhum instrumento</span>}
+                  {ep.instruments.length === 0 && <span className="text-[10px] text-text-tertiary">Nenhum instrumento</span>}
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
@@ -780,7 +766,6 @@ export const Professors = () => {
                       onValueChange={(v) => { if (v) handleAddProfessorInstrument(editProf, v); }}
                       options={availableInsts.map(i => ({ value: i.id, label: i.name }))}
                       placeholder="Adicionar instrumento..."
-                      dark={dark}
                     />
                   </div>
                 </div>
@@ -804,17 +789,17 @@ export const Professors = () => {
                         if (inst) { await handleAddProfessorInstrument(editProf, inst.id); setEpNewInst(""); }
                       }
                     }}
-                    className={cn("px-3 py-2 rounded-xl text-[10px] font-semibold border-none cursor-pointer", dark ? "bg-violet-600 text-white" : "bg-violet-500 text-white")}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary hover:bg-surface-tertiary/80 transition-colors"
                   >
-                    <Plus size={12} />
+                    <Plus size={14} />
                   </button>
                 </div>
               </div>
               <button
                 onClick={saveEditProf}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-bold shadow-lg border-none cursor-pointer"
+                className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
               >
-                Salvar
+                Salvar Alterações
               </button>
             </div>
           );
@@ -826,27 +811,26 @@ export const Professors = () => {
         open={!!payPopover}
         onOpenChange={(v) => { if (!v) setPayPopover(null); }}
         title={payPopover ? `${MF[payPopover.month]} ${data.config.year}` : ""}
-        dark={dark}
         size="sm"
       >
         {payPopover && (() => {
           const ds = getDisplayStatus(payPopover.payment, payPopover.month);
           const statusBadge = {
-            PAID: { label: "Pago", cls: dark ? "bg-emerald-900/30 text-emerald-400" : "bg-emerald-100 text-emerald-700" },
-            PENDING: { label: "Pendente", cls: dark ? "bg-amber-900/30 text-amber-400" : "bg-amber-100 text-amber-700" },
-            LATE: { label: "Em Atraso", cls: dark ? "bg-rose-900/30 text-rose-400" : "bg-rose-100 text-rose-700" },
-            WAIVED: { label: "Isento", cls: dark ? "bg-slate-700 text-slate-400" : "bg-slate-200 text-slate-500" },
-            FUTURE: { label: "Previsto", cls: dark ? "bg-slate-700 text-slate-400" : "bg-slate-200 text-slate-500" },
+            PAID: { label: "Pago", cls: "bg-accent-green/10 text-accent-green" },
+            PENDING: { label: "Pendente", cls: "bg-accent-amber/10 text-accent-amber" },
+            LATE: { label: "Em Atraso", cls: "bg-accent-red/10 text-accent-red" },
+            WAIVED: { label: "Isento", cls: "bg-surface-tertiary text-text-tertiary" },
+            FUTURE: { label: "Previsto", cls: "bg-surface-tertiary text-text-tertiary" },
           }[ds];
           return (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className={cn("text-[10px] font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Status atual</span>
-                <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold", statusBadge.cls)}>{statusBadge.label}</span>
+                <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Status atual</span>
+                <span className={cn("px-2.5 py-1 rounded-md text-[10px] font-medium", statusBadge.cls)}>{statusBadge.label}</span>
               </div>
               <div>
                 <label className={lbl}>Previsto</label>
-                <p className={cn("text-sm font-bold", dark ? "text-white" : "text-slate-800")}>{brl(payPopover.tuition)}</p>
+                <p className="text-sm font-mono font-bold text-text-primary">{brl(payPopover.tuition)}</p>
               </div>
               {ds !== "PAID" && ds !== "WAIVED" && (
                 <div>
@@ -854,11 +838,11 @@ export const Professors = () => {
                   <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className={inp} autoFocus />
                 </div>
               )}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 mt-4">
                 {ds !== "PAID" && ds !== "WAIVED" && (
                   <button
                     onClick={() => { handleConfirmPayment(payPopover.profId, payPopover.studentId, payPopover.month, Number(payAmount) || payPopover.tuition); setPayPopover(null); }}
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-semibold shadow-lg border-none cursor-pointer"
+                    className="w-full py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
                   >
                     Confirmar Pagamento
                   </button>
@@ -866,22 +850,22 @@ export const Professors = () => {
                 {ds !== "WAIVED" && (
                   <button
                     onClick={() => { handleWaivePayment(payPopover.profId, payPopover.studentId, payPopover.month); setPayPopover(null); }}
-                    className={cn("w-full py-2 rounded-xl text-xs font-medium border-none cursor-pointer", dark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}
+                    className="w-full py-2.5 rounded-lg bg-surface-tertiary text-text-primary text-xs font-medium hover:bg-surface-tertiary/80 transition-colors border border-border-secondary cursor-pointer"
                   >
-                    Isentar (Bolsa)
+                    Isentar Mensalidade
                   </button>
                 )}
                 {(ds === "PAID" || ds === "WAIVED") && (
                   <button
-                    onClick={() => { handleRevertPayment(payPopover.profId, payPopover.studentId, payPopover.month, payPopover.tuition); setPayPopover(null); }}
-                    className={cn("w-full py-2 rounded-xl text-xs font-medium border-none cursor-pointer", dark ? "bg-amber-900/30 text-amber-400 hover:bg-amber-900/50" : "bg-amber-50 text-amber-700 hover:bg-amber-100")}
+                    onClick={() => { handleRevertPayment(payPopover.profId, payPopover.studentId, payPopover.month); setPayPopover(null); }}
+                    className="w-full py-2.5 rounded-lg bg-accent-amber/10 text-accent-amber text-xs font-medium hover:bg-accent-amber/20 transition-colors border border-border-secondary cursor-pointer"
                   >
                     Reverter para Pendente
                   </button>
                 )}
                 <button
                   onClick={() => setPayPopover(null)}
-                  className={cn("w-full py-2 rounded-xl text-xs font-medium border-none cursor-pointer", dark ? "bg-slate-700 text-slate-400" : "bg-slate-50 text-slate-500")}
+                  className="w-full py-2.5 rounded-lg bg-surface-primary text-text-secondary text-xs font-medium hover:text-text-primary transition-colors border border-transparent cursor-pointer mt-2"
                 >
                   Cancelar
                 </button>
@@ -900,7 +884,6 @@ export const Professors = () => {
         confirmLabel={confirmState.confirmLabel}
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
-        dark={dark}
       />
     </div>
   );

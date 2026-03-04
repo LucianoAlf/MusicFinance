@@ -11,28 +11,24 @@ export const Header = () => {
   return (
     <header
       className={cn(
-        "h-12 flex items-center justify-between px-5 border-b backdrop-blur-sm sticky top-0 z-20",
-        dark ? "border-slate-800 bg-slate-900/90" : "border-slate-100 bg-white/90"
+        "h-14 flex items-center justify-between px-5 border-b backdrop-blur-sm sticky top-0 z-20",
+        "bg-surface-primary/90 border-border-primary"
       )}
     >
       <div className="flex items-center gap-3">
         <span
           className={cn(
-            "text-[9px] px-2 py-1 rounded-full flex items-center gap-1 transition-all",
+            "text-[10px] px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all font-medium",
             saveStatus === "saving"
-              ? dark
-                ? "bg-amber-900/30 text-amber-400"
-                : "bg-amber-50 text-amber-600"
-              : dark
-              ? "bg-emerald-900/30 text-emerald-400"
-              : "bg-emerald-50 text-emerald-600"
+              ? "bg-accent-amber/10 text-accent-amber"
+              : "bg-accent-green/10 text-accent-green"
           )}
         >
-          {saveStatus === "saving" ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle size={11} />}
+          {saveStatus === "saving" ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
           <span>{saveStatus === "saving" ? "Salvando..." : "Salvo"}</span>
         </span>
         {selectedSchool && (
-          <span className={cn("text-xs", dark ? "text-slate-500" : "text-slate-400")}>
+          <span className="text-xs text-text-tertiary font-medium">
             {selectedSchool.name}
           </span>
         )}
@@ -40,23 +36,13 @@ export const Header = () => {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setDark(!dark)}
-          className={cn(
-            "p-2 rounded-xl transition-all border-none cursor-pointer",
-            dark
-              ? "bg-slate-800 text-amber-400 hover:bg-slate-700"
-              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-          )}
+          className="p-2 rounded-lg transition-colors border-none cursor-pointer text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary bg-transparent"
         >
           {dark ? <Sun size={16} /> : <Moon size={16} />}
         </button>
         <button
           onClick={signOut}
-          className={cn(
-            "p-2 rounded-xl transition-all border-none cursor-pointer",
-            dark
-              ? "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-red-400"
-              : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-red-500"
-          )}
+          className="p-2 rounded-lg transition-colors border-none cursor-pointer text-text-tertiary hover:bg-surface-tertiary hover:text-accent-red bg-transparent"
           title="Sair"
         >
           <LogOut size={16} />

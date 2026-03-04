@@ -12,7 +12,6 @@ interface DatePickerProps {
   placeholder?: string;
   disabled?: boolean;
   readOnly?: boolean;
-  dark?: boolean;
   className?: string;
 }
 
@@ -28,7 +27,6 @@ export function DatePicker({
   placeholder = "dd/mm/aaaa",
   disabled = false,
   readOnly = false,
-  dark = false,
   className,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
@@ -47,20 +45,16 @@ export function DatePicker({
   }
 
   const triggerBase = cn(
-    "flex w-full items-center gap-2 px-3 py-2.5 rounded-xl text-xs border-2",
-    "focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all duration-150",
-    "data-[state=open]:ring-2 data-[state=open]:ring-violet-500/50",
+    "flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-xs border bg-surface-secondary border-border-secondary text-text-primary hover:border-border-hover",
+    "focus:outline-none focus:ring-1 focus:ring-border-hover transition-all duration-150",
     (disabled || readOnly) && "opacity-50 cursor-not-allowed",
-    dark
-      ? "bg-slate-700 border-slate-600 text-white hover:border-slate-500"
-      : "bg-slate-50 border-slate-200 text-slate-900 hover:border-slate-300",
     className
   );
 
   if (readOnly) {
     return (
       <div className={triggerBase}>
-        <Calendar size={12} className={dark ? "text-slate-400 shrink-0" : "text-slate-400 shrink-0"} />
+        <Calendar size={12} className="text-text-tertiary shrink-0" />
         <span className="flex-1 text-left">{displayValue || placeholder}</span>
       </div>
     );
@@ -74,18 +68,15 @@ export function DatePicker({
           disabled={disabled}
           className={triggerBase}
         >
-          <Calendar size={12} className={dark ? "text-slate-400 shrink-0" : "text-slate-400 shrink-0"} />
-          <span className={cn("flex-1 text-left", !displayValue && (dark ? "text-slate-500" : "text-slate-400"))}>
+          <Calendar size={12} className="text-text-tertiary shrink-0" />
+          <span className={cn("flex-1 text-left", !displayValue && "text-text-tertiary")}>
             {displayValue || placeholder}
           </span>
           {value && (
             <button
               type="button"
               onClick={handleClear}
-              className={cn(
-                "shrink-0 p-0.5 rounded-full transition-colors",
-                dark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"
-              )}
+              className="shrink-0 p-0.5 rounded-full transition-colors text-text-tertiary hover:text-text-primary"
             >
               <X size={10} />
             </button>
@@ -98,9 +89,9 @@ export function DatePicker({
           sideOffset={4}
           align="start"
           className={cn(
-            "z-[200] rounded-2xl border shadow-2xl p-3",
+            "z-[200] p-3 rounded-xl border shadow-xl shadow-black/20",
             "datepicker-content-animation",
-            dark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+            "bg-surface-secondary border-border-secondary"
           )}
         >
           <DayPicker
@@ -110,70 +101,41 @@ export function DatePicker({
             locale={ptBR}
             defaultMonth={selected ?? new Date()}
             modifiersClassNames={{
-              selected: "!text-white",
+              selected: "!text-surface-primary",
             }}
             classNames={{
-              root: cn("text-xs", dark ? "text-white" : "text-slate-900"),
+              root: "text-xs text-text-primary",
               months: "flex flex-col",
               month: "space-y-2",
-              month_caption: cn(
-                "flex items-center justify-center py-1 text-xs font-semibold capitalize",
-                dark ? "text-white" : "text-slate-900"
-              ),
+              month_caption: "flex items-center justify-center py-1 text-xs font-semibold capitalize text-text-primary",
               nav: "flex items-center justify-between absolute inset-x-3 top-[14px]",
-              button_previous: cn(
-                "p-1 rounded-lg transition-colors border-none cursor-pointer",
-                dark ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-slate-100"
-              ),
-              button_next: cn(
-                "p-1 rounded-lg transition-colors border-none cursor-pointer",
-                dark ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-slate-100"
-              ),
+              button_previous: "p-1 rounded-lg transition-colors border-none cursor-pointer text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary",
+              button_next: "p-1 rounded-lg transition-colors border-none cursor-pointer text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary",
               month_grid: "w-full border-collapse mt-1",
               weekdays: "flex",
-              weekday: cn(
-                "w-8 h-7 flex items-center justify-center text-[10px] font-semibold",
-                dark ? "text-slate-500" : "text-slate-400"
-              ),
+              weekday: "w-8 h-7 flex items-center justify-center text-[10px] font-semibold text-text-tertiary",
               week: "flex w-full",
               day: "w-8 h-8 flex items-center justify-center",
-              day_button: cn(
-                "w-full h-full flex items-center justify-center rounded-lg text-[11px] font-medium",
-                "cursor-pointer transition-colors border-none",
-                dark
-                  ? "text-slate-300 hover:bg-slate-700"
-                  : "text-slate-700 hover:bg-violet-50"
-              ),
-              selected: cn(
-                dark ? "bg-violet-600 rounded-lg" : "bg-violet-600 rounded-lg"
-              ),
-              today: cn(
-                "font-bold",
-                dark ? "text-violet-400" : "text-violet-600"
-              ),
-              outside: "opacity-30",
+              day_button: "w-full h-full flex items-center justify-center rounded-lg text-[11px] font-medium cursor-pointer transition-colors border-none bg-transparent text-text-primary hover:bg-surface-tertiary",
+              selected: "bg-accent-blue rounded-lg font-bold text-surface-primary",
+              today: "font-bold text-accent-blue",
+              outside: "opacity-30 text-text-tertiary",
               disabled: "opacity-20 cursor-not-allowed",
               hidden: "invisible",
             }}
           />
-          <div className={cn("mt-2 pt-2 border-t flex justify-between", dark ? "border-slate-700" : "border-slate-100")}>
+          <div className="mt-2 pt-2 border-t flex justify-between border-border-secondary">
             <button
               type="button"
               onClick={() => { onChange(format(new Date(), "yyyy-MM-dd")); setOpen(false); }}
-              className={cn(
-                "text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border-none cursor-pointer",
-                dark ? "text-violet-400 hover:bg-slate-700" : "text-violet-600 hover:bg-violet-50"
-              )}
+              className="text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border-none cursor-pointer text-accent-blue hover:bg-surface-tertiary bg-transparent"
             >
               Hoje
             </button>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className={cn(
-                "text-[10px] font-medium px-2 py-1 rounded-lg transition-colors border-none cursor-pointer",
-                dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100"
-              )}
+              className="text-[10px] font-medium px-2 py-1 rounded-lg transition-colors border-none cursor-pointer text-text-secondary hover:bg-surface-tertiary hover:text-text-primary bg-transparent"
             >
               Fechar
             </button>

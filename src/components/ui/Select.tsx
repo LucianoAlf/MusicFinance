@@ -15,7 +15,6 @@ interface SelectProps {
   options: SelectOption[];
   placeholder?: string;
   disabled?: boolean;
-  dark?: boolean;
   compact?: boolean;
   className?: string;
 }
@@ -26,7 +25,6 @@ export function Select({
   options,
   placeholder = "Selecione...",
   disabled = false,
-  dark = false,
   compact = false,
   className,
 }: SelectProps) {
@@ -37,16 +35,13 @@ export function Select({
       <RadixSelect.Trigger
         className={cn(
           "flex items-center transition-all duration-150",
-          "focus:outline-none focus:ring-2 focus:ring-violet-500/50",
+          "focus:outline-none focus:ring-1 focus:ring-border-hover",
           disabled && "opacity-50 cursor-not-allowed",
           compact
             ? "justify-start gap-0 px-0 py-0 rounded-full border-0 bg-transparent cursor-pointer"
             : cn(
-                "w-full justify-between gap-2 px-3 py-2.5 rounded-xl text-xs border-2",
-                "data-[state=open]:ring-2 data-[state=open]:ring-violet-500/50",
-                dark
-                  ? "bg-slate-700 border-slate-600 text-white hover:border-slate-500"
-                  : "bg-slate-50 border-slate-200 text-slate-900 hover:border-slate-300"
+                "w-full justify-between gap-2 px-3 py-2.5 rounded-lg text-xs border",
+                "bg-surface-secondary border-border-secondary text-text-primary hover:border-border-hover"
               ),
           className
         )}
@@ -68,58 +63,54 @@ export function Select({
         </div>
         {!compact && (
           <RadixSelect.Icon asChild>
-            <ChevronDown
-              size={12}
-              className={cn(
-                "shrink-0 transition-transform duration-200",
-                dark ? "text-slate-400" : "text-slate-500",
-                "group-data-[state=open]:rotate-180"
-              )}
-            />
-          </RadixSelect.Icon>
-        )}
-      </RadixSelect.Trigger>
-
-      <RadixSelect.Portal>
-        <RadixSelect.Content
-          position="popper"
-          sideOffset={4}
-          className={cn(
-            "z-[200] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border shadow-xl",
-            "select-content-animation",
-            dark
-              ? "bg-slate-800 border-slate-700"
-              : "bg-white border-slate-200"
-          )}
-        >
-          <RadixSelect.Viewport className="p-1">
-            {options.map((opt) => (
-              <RadixSelect.Item
-                key={opt.value}
-                value={opt.value}
+              <ChevronDown
+                size={12}
                 className={cn(
-                  "flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer",
-                  "select-none outline-none transition-colors duration-100",
-                  dark
-                    ? "text-white hover:bg-slate-700 data-[highlighted]:bg-slate-700 data-[state=checked]:bg-slate-700"
-                    : "text-slate-800 hover:bg-slate-50 data-[highlighted]:bg-slate-50 data-[state=checked]:bg-violet-50"
+                  "shrink-0 transition-transform duration-200",
+                  "text-text-tertiary",
+                  "group-data-[state=open]:rotate-180"
                 )}
-              >
-                <RadixSelect.ItemText>
-                  {opt.color ? (
-                    <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-semibold", opt.color)}>
-                      {opt.label}
-                    </span>
-                  ) : (
-                    <span className="font-medium">{opt.label}</span>
+              />
+            </RadixSelect.Icon>
+          )}
+        </RadixSelect.Trigger>
+
+        <RadixSelect.Portal>
+          <RadixSelect.Content
+            position="popper"
+            sideOffset={4}
+            className={cn(
+              "z-[200] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border shadow-xl shadow-black/20",
+              "select-content-animation",
+              "bg-surface-secondary border-border-secondary"
+            )}
+          >
+            <RadixSelect.Viewport className="p-1">
+              {options.map((opt) => (
+                <RadixSelect.Item
+                  key={opt.value}
+                  value={opt.value}
+                  className={cn(
+                    "flex items-center justify-between gap-2 px-3 py-2 rounded-md text-xs cursor-pointer",
+                    "select-none outline-none transition-colors duration-100",
+                    "text-text-primary hover:bg-surface-tertiary data-[highlighted]:bg-surface-tertiary data-[state=checked]:bg-surface-tertiary"
                   )}
-                </RadixSelect.ItemText>
-                <RadixSelect.ItemIndicator>
-                  <Check size={11} className={dark ? "text-violet-400" : "text-violet-600"} />
-                </RadixSelect.ItemIndicator>
-              </RadixSelect.Item>
-            ))}
-          </RadixSelect.Viewport>
+                >
+                  <RadixSelect.ItemText>
+                    {opt.color ? (
+                      <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-semibold", opt.color)}>
+                        {opt.label}
+                      </span>
+                    ) : (
+                      <span className="font-medium">{opt.label}</span>
+                    )}
+                  </RadixSelect.ItemText>
+                  <RadixSelect.ItemIndicator>
+                    <Check size={11} className="text-accent-blue" />
+                  </RadixSelect.ItemIndicator>
+                </RadixSelect.Item>
+              ))}
+            </RadixSelect.Viewport>
         </RadixSelect.Content>
       </RadixSelect.Portal>
     </RadixSelect.Root>

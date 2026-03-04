@@ -9,7 +9,6 @@ interface ModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title?: string;
-  dark?: boolean;
   size?: "sm" | "md" | "lg";
   children: React.ReactNode;
 }
@@ -20,7 +19,7 @@ const sizeClass = {
   lg: "w-[560px]",
 };
 
-export function Modal({ open, onOpenChange, title, dark = false, size = "md", children }: ModalProps) {
+export function Modal({ open, onOpenChange, title, size = "md", children }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -28,24 +27,21 @@ export function Modal({ open, onOpenChange, title, dark = false, size = "md", ch
         <Dialog.Content
           className={cn(
             "modal-content fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-            "rounded-2xl shadow-2xl p-6 focus:outline-none",
+            "rounded-xl p-6 focus:outline-none",
             sizeClass[size],
-            dark ? "bg-slate-800" : "bg-white"
+            "bg-surface-secondary border border-border-primary shadow-2xl shadow-black/50"
           )}
         >
           {title && (
             <div className="flex items-center justify-between mb-5">
               <Dialog.Title
-                className={cn("text-sm font-bold", dark ? "text-white" : "text-slate-900")}
+                className="text-base font-semibold text-text-primary"
               >
                 {title}
               </Dialog.Title>
               <Dialog.Close asChild>
                 <button
-                  className={cn(
-                    "p-1 rounded-md border-none cursor-pointer transition-colors",
-                    dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100"
-                  )}
+                  className="p-1 rounded-md border-none cursor-pointer transition-colors text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary"
                 >
                   <X size={16} />
                 </button>
@@ -70,7 +66,6 @@ interface ConfirmModalProps {
   cancelLabel?: string;
   onConfirm: () => void;
   variant?: "danger" | "warning" | "default";
-  dark?: boolean;
 }
 
 export function ConfirmModal({
@@ -82,7 +77,6 @@ export function ConfirmModal({
   cancelLabel = "Cancelar",
   onConfirm,
   variant = "danger",
-  dark = false,
 }: ConfirmModalProps) {
   function handleConfirm() {
     onConfirm();
@@ -90,10 +84,10 @@ export function ConfirmModal({
   }
 
   const confirmBtnClass = cn(
-    "flex-1 py-2.5 rounded-xl text-xs font-bold shadow-sm border-none cursor-pointer transition-all",
-    variant === "danger" && "bg-rose-500 hover:bg-rose-600 text-white",
-    variant === "warning" && "bg-amber-500 hover:bg-amber-600 text-white",
-    variant === "default" && "bg-violet-600 hover:bg-violet-700 text-white"
+    "flex-1 py-2.5 rounded-xl text-xs font-bold border-none cursor-pointer transition-all",
+    variant === "danger" && "bg-accent-red text-surface-primary hover:opacity-90",
+    variant === "warning" && "bg-accent-amber text-surface-primary hover:opacity-90",
+    variant === "default" && "bg-accent-blue text-surface-primary hover:opacity-90"
   );
 
   return (
@@ -103,42 +97,30 @@ export function ConfirmModal({
         <Dialog.Content
           className={cn(
             "modal-content fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-            "rounded-2xl shadow-2xl p-6 focus:outline-none w-80",
-            dark ? "bg-slate-800" : "bg-white"
+            "rounded-xl p-6 focus:outline-none w-80",
+            "bg-surface-secondary border border-border-primary shadow-2xl shadow-black/50"
           )}
         >
           <div className="flex flex-col items-center text-center gap-3 mb-5">
             <div className={cn(
               "w-10 h-10 rounded-full flex items-center justify-center",
-              variant === "danger" && "bg-rose-100",
-              variant === "warning" && "bg-amber-100",
-              variant === "default" && "bg-violet-100"
+              variant === "danger" && "bg-accent-red/10 text-accent-red",
+              variant === "warning" && "bg-accent-amber/10 text-accent-amber",
+              variant === "default" && "bg-accent-blue/10 text-accent-blue"
             )}>
-              <AlertTriangle
-                size={20}
-                className={cn(
-                  variant === "danger" && "text-rose-500",
-                  variant === "warning" && "text-amber-500",
-                  variant === "default" && "text-violet-500"
-                )}
-              />
+              <AlertTriangle size={20} />
             </div>
-            <Dialog.Title
-              className={cn("text-sm font-bold", dark ? "text-white" : "text-slate-900")}
-            >
+            <Dialog.Title className="text-base font-semibold text-text-primary mb-1">
               {title}
             </Dialog.Title>
-            <p className={cn("text-xs leading-relaxed", dark ? "text-slate-400" : "text-slate-500")}>
+            <p className="text-xs text-text-secondary leading-relaxed">
               {message}
             </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => onOpenChange(false)}
-              className={cn(
-                "flex-1 py-2.5 rounded-xl text-xs font-medium border-none cursor-pointer transition-all",
-                dark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              )}
+              className="flex-1 py-2.5 rounded-xl text-xs font-medium border-none cursor-pointer transition-all bg-surface-tertiary text-text-secondary hover:text-text-primary"
             >
               {cancelLabel}
             </button>

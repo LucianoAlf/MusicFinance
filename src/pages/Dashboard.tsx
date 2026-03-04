@@ -36,7 +36,7 @@ import {
 } from "recharts";
 
 export const Dashboard = () => {
-  const { data, calcMo, curMo, setCurMo, dark, viewKpis } = useData();
+  const { data, calcMo, curMo, setCurMo, viewKpis } = useData();
   if (!data) return null;
 
   const md = Array.from({ length: 12 }, (_, i) => calcMo(i));
@@ -75,20 +75,13 @@ export const Dashboard = () => {
 
   const pieData = ccT.filter((x) => x.total > 0);
 
-  const cd = cn(
-    "rounded-2xl p-5 shadow-sm border",
-    dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100"
-  );
-  const tc = dark ? "#94a3b8" : "#64748b";
-  const gc = dark ? "#334155" : "#e2e8f0";
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header com seletor de meses */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b border-border-primary pb-4">
         <div>
-          <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Dashboard</h1>
-          <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Dashboard</h1>
+          <p className="text-xs mt-1 text-text-secondary">
             {data.config.schoolName} — {data.config.year}
           </p>
         </div>
@@ -97,92 +90,94 @@ export const Dashboard = () => {
 
       {/* Seção FINANCEIRO — Mês Selecionado */}
       <div>
-        <p className={cn("text-[10px] font-semibold mb-2 uppercase tracking-wider", dark ? "text-slate-500" : "text-slate-400")}>
+        <p className="text-[10px] font-semibold mb-3 uppercase tracking-wider text-text-secondary">
           Financeiro — {MF[curMo]}
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard icon={DollarSign} label="Receita" value={brl(cur.revenue)} color="green" trend={trend(cur.revenue, prev?.revenue)} />
-          <KpiCard icon={Wallet} label="Despesas" value={brl(cur.expenses)} color="red" trend={trend(cur.expenses, prev?.expenses)} />
-          <KpiCard icon={PiggyBank} label="Resultado" value={brl(cur.profit)} color={cur.profit >= 0 ? "green" : "red"} trend={trend(cur.profit, prev?.profit)} />
-          <KpiCard icon={Target} label="Margem" value={pct(cur.margin)} color="purple" />
-          <KpiCard icon={BarChart} label="Ticket Médio" value={brl(cur.ticket)} color="teal" sub={`Custo ${brl(cur.costPerStudent)}`} />
-          <KpiCard icon={Crosshair} label="Ponto de Equilíbrio" value={breakevenRevenue != null ? brl(breakevenRevenue) : "—"} color="orange" />
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <KpiCard label="Receita" value={brl(cur.revenue)} trend={trend(cur.revenue, prev?.revenue)} />
+          <KpiCard label="Despesas" value={brl(cur.expenses)} trend={trend(cur.expenses, prev?.expenses)} invertTrend />
+          <KpiCard label="Resultado" value={brl(cur.profit)} trend={trend(cur.profit, prev?.profit)} />
+          <KpiCard label="Margem" value={pct(cur.margin)} />
+          <KpiCard label="Ticket Médio" value={brl(cur.ticket)} sub={`Custo ${brl(cur.costPerStudent)}`} />
+          <KpiCard label="Ponto de Equilíbrio" value={breakevenRevenue != null ? brl(breakevenRevenue) : "—"} />
         </div>
       </div>
 
+      <div className="border-b border-border-primary"></div>
+
       {/* Seção ALUNOS — Mês Selecionado */}
       <div>
-        <p className={cn("text-[10px] font-semibold mb-2 uppercase tracking-wider", dark ? "text-slate-500" : "text-slate-400")}>
+        <p className="text-[10px] font-semibold mb-3 uppercase tracking-wider text-text-secondary">
           Alunos — {MF[curMo]}
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard icon={Users} label="Ativos" value={activeStudents} color="blue" />
-          <KpiCard icon={GraduationCap} label="Pagantes" value={cur.payingStudents} color="green" sub={`${data.professors.length} profs`} />
-          <KpiCard icon={UserPlus} label="Matrículas" value={newEnrollments} color="teal" trend={trend(newEnrollments, kpiPrev?.newEnrollments ?? null)} />
-          <KpiCard icon={UserMinus} label="Evasões" value={churnedStudents} color="red" trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
-          <KpiCard icon={TrendingDown} label="Churn Rate" value={churnRate.toFixed(1) + "%"} color="rose" trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
-          <KpiCard icon={Clock} label="Permanência Média" value={avgTenure.toFixed(1) + " m"} color="cyan" />
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <KpiCard label="Ativos" value={activeStudents} />
+          <KpiCard label="Pagantes" value={cur.payingStudents} sub={`${data.professors.length} profs`} />
+          <KpiCard label="Matrículas" value={newEnrollments} trend={trend(newEnrollments, kpiPrev?.newEnrollments ?? null)} />
+          <KpiCard label="Evasões" value={churnedStudents} trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
+          <KpiCard label="Churn Rate" value={churnRate.toFixed(1) + "%"} trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
+          <KpiCard label="Permanência" value={avgTenure.toFixed(1) + " m"} />
         </div>
       </div>
 
       {/* Seção ACUMULADO ANUAL — Card compacto */}
-      <div className={cn("rounded-xl p-4 border", dark ? "bg-slate-800/60 border-slate-700/50" : "bg-slate-50 border-slate-200")}>
+      <div className="rounded-xl p-4 border border-border-primary bg-surface-tertiary">
         <div className="flex items-center gap-2 mb-3">
-          <Calendar size={14} className={dark ? "text-slate-400" : "text-slate-500"} />
-          <p className={cn("text-[11px] font-semibold uppercase tracking-wider", dark ? "text-slate-400" : "text-slate-500")}>
+          <Calendar size={14} className="text-text-tertiary" />
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
             Acumulado Anual
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Receita</p>
-            <p className={cn("text-lg font-bold", dark ? "text-emerald-400" : "text-emerald-600")}>{brl(tR)}</p>
+            <p className="text-xs text-text-secondary mb-1">Receita</p>
+            <p className="text-lg font-mono font-medium text-accent-green">{brl(tR)}</p>
           </div>
           <div>
-            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Despesas</p>
-            <p className={cn("text-lg font-bold", dark ? "text-rose-400" : "text-rose-600")}>{brl(tE)}</p>
+            <p className="text-xs text-text-secondary mb-1">Despesas</p>
+            <p className="text-lg font-mono font-medium text-accent-red">{brl(tE)}</p>
           </div>
           <div>
-            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Resultado</p>
-            <p className={cn("text-lg font-bold", tProfit >= 0 ? (dark ? "text-emerald-400" : "text-emerald-600") : (dark ? "text-rose-400" : "text-rose-600"))}>
+            <p className="text-xs text-text-secondary mb-1">Resultado</p>
+            <p className={cn("text-lg font-mono font-medium", tProfit >= 0 ? "text-accent-green" : "text-accent-red")}>
               {brl(tProfit)}
             </p>
           </div>
           <div>
-            <p className={cn("text-xs", dark ? "text-slate-400" : "text-slate-500")}>Margem</p>
-            <p className={cn("text-lg font-bold", dark ? "text-violet-400" : "text-violet-600")}>{pct(tMargin)}</p>
+            <p className="text-xs text-text-secondary mb-1">Margem</p>
+            <p className="text-lg font-mono font-medium text-text-primary">{pct(tMargin)}</p>
           </div>
         </div>
       </div>
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className={cn("lg:col-span-2", cd)}>
-          <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
+        <div className="lg:col-span-2 rounded-xl p-4 bg-surface-secondary border border-border-primary">
+          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
             Receita × Despesa × Resultado
           </h3>
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={md} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gc} />
-                <XAxis dataKey="month" stroke={tc} fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke={tc} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-primary)" />
+                <XAxis dataKey="month" stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: dark ? "#1e293b" : "#fff", borderColor: gc, borderRadius: "8px", fontSize: "11px" }}
+                  contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
                   formatter={(value: number) => brl(value)}
                 />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: "11px" }} />
-                <ReferenceLine x={MS[curMo]} stroke={dark ? "#94a3b8" : "#64748b"} strokeDasharray="3 3" />
-                <Line type="monotone" dataKey="revenue" name="Receita" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                <Line type="monotone" dataKey="expenses" name="Despesa" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                <Line type="monotone" dataKey="profit" name="Resultado" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />
+                <ReferenceLine x={MS[curMo]} stroke="var(--color-text-tertiary)" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="revenue" name="Receita" stroke="var(--color-accent-green)" strokeWidth={2} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="expenses" name="Despesas" stroke="var(--color-accent-red)" strokeWidth={2} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="profit" name="Resultado" stroke="var(--color-accent-blue)" strokeWidth={2} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className={cd}>
-          <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
+        <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
+          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
             Centros de Custo
           </h3>
           <div className="h-60">
@@ -190,14 +185,14 @@ export const Dashboard = () => {
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" paddingAngle={2} dataKey="total">
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={`cell-${index}`} fill={entry.fill} stroke="var(--color-surface-secondary)" />
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ backgroundColor: dark ? "#1e293b" : "#fff", borderColor: gc, borderRadius: "8px", fontSize: "11px" }}
+                  contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
                   formatter={(value: number) => brl(value)}
                 />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: "11px" }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -205,27 +200,27 @@ export const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className={cd}>
-          <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
+        <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
+          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
             Margem Mensal
           </h3>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsBarChart data={md} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gc} />
-                <XAxis dataKey="month" stroke={tc} fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke={tc} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => pct(v)} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-primary)" />
+                <XAxis dataKey="month" stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => pct(v)} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: dark ? "#1e293b" : "#fff", borderColor: gc, borderRadius: "8px", fontSize: "11px" }}
+                  contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
                   formatter={(value: number) => pct(value)}
                 />
                 <Bar dataKey="margin" radius={[4, 4, 4, 4]}>
                   {md.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.margin >= 0 ? "rgba(16,185,129,0.7)" : "rgba(239,68,68,0.7)"}
-                      stroke={index === curMo ? (dark ? "#94a3b8" : "#64748b") : "transparent"}
-                      strokeWidth={index === curMo ? 2 : 0}
+                      fill={entry.margin >= 0 ? "var(--color-accent-green)" : "var(--color-accent-red)"}
+                      stroke={index === curMo ? "var(--color-text-primary)" : "transparent"}
+                      strokeWidth={index === curMo ? 1 : 0}
                     />
                   ))}
                 </Bar>
@@ -234,23 +229,23 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        <div className={cd}>
-          <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
+        <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
+          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
             Fixos vs Variáveis
           </h3>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsBarChart data={md} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gc} />
-                <XAxis dataKey="month" stroke={tc} fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke={tc} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border-primary)" />
+                <XAxis dataKey="month" stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: dark ? "#1e293b" : "#fff", borderColor: gc, borderRadius: "8px", fontSize: "11px" }}
+                  contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
                   formatter={(value: number) => brl(value)}
                 />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="fixedCost" name="Fixo" stackId="a" fill="rgba(99,102,241,0.7)" />
-                <Bar dataKey="varCost" name="Variável" stackId="a" fill="rgba(245,158,11,0.7)" radius={[4, 4, 0, 0]} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />
+                <Bar dataKey="fixedCost" name="Fixo" stackId="a" fill="var(--color-accent-blue)" />
+                <Bar dataKey="varCost" name="Variável" stackId="a" fill="var(--color-accent-amber)" radius={[4, 4, 0, 0]} />
               </RechartsBarChart>
             </ResponsiveContainer>
           </div>
@@ -258,21 +253,21 @@ export const Dashboard = () => {
       </div>
 
       {/* Tabela de Indicadores Mensais */}
-      <div className={cd}>
-        <h3 className={cn("text-xs font-semibold mb-3", dark ? "text-slate-300" : "text-slate-700")}>
+      <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
+        <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
           Indicadores Mensais
         </h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-[11px] text-left border-collapse">
             <thead>
-              <tr className={cn(dark ? "text-slate-400" : "text-slate-500")}>
-                <th className="text-left py-1.5 px-2 font-medium">Indicador</th>
+              <tr>
+                <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 border-b border-border-primary font-medium">Indicador</th>
                 {MS.map((m, i) => (
                   <th
                     key={m}
                     className={cn(
-                      "text-center py-1.5 px-1 font-medium",
-                      i === curMo && (dark ? "bg-violet-900/30 text-violet-400" : "bg-violet-50 text-violet-600")
+                      "font-sans text-[10px] uppercase tracking-wider text-center pb-2 border-b border-border-primary font-medium",
+                      i === curMo ? "text-text-primary" : "text-text-tertiary"
                     )}
                   >
                     {m}
@@ -289,19 +284,14 @@ export const Dashboard = () => {
                 { l: "Pagantes", k: "payingStudents", f: (v: any) => v },
                 { l: "Ticket", k: "ticket", f: brl },
               ].map((r) => (
-                <tr key={r.l} className={cn("border-t", dark ? "border-slate-700/30" : "border-slate-100")}>
-                  <td className={cn("py-1.5 px-2 font-medium", dark ? "text-slate-300" : "text-slate-700")}>{r.l}</td>
+                <tr key={r.l} className="hover:bg-surface-tertiary transition-colors group">
+                  <td className="py-2.5 px-2 font-medium text-text-secondary border-b border-border-primary group-last:border-0">{r.l}</td>
                   {md.map((d, i) => (
                     <td
                       key={i}
                       className={cn(
-                        "text-center py-1.5 px-1",
-                        i === curMo && (dark ? "bg-violet-900/20" : "bg-violet-50"),
-                        r.k === "profit" && d[r.k as keyof typeof d] < 0
-                          ? "text-rose-500 font-semibold"
-                          : dark
-                          ? "text-slate-300"
-                          : "text-slate-600"
+                        "py-2.5 px-1 text-center font-mono border-b border-border-primary group-last:border-0",
+                        i === curMo ? "text-text-primary font-medium bg-surface-tertiary/50" : "text-text-secondary"
                       )}
                     >
                       {r.f(d[r.k as keyof typeof d])}

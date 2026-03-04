@@ -1,5 +1,4 @@
 import React from "react";
-import { useData } from "../context/DataContext";
 import { MS, cn } from "../lib/utils";
 
 interface MonthSelectorProps {
@@ -8,21 +7,17 @@ interface MonthSelectorProps {
 }
 
 export const MonthSelector: React.FC<MonthSelectorProps> = ({ curMo, setCurMo }) => {
-  const { dark } = useData();
-
   return (
-    <div className="flex gap-0.5 flex-wrap">
+    <div className="flex gap-1 flex-wrap p-1 rounded-xl bg-surface-secondary border border-border-primary">
       {MS.map((m, i) => (
         <button
           key={m}
           onClick={() => setCurMo(i)}
           className={cn(
-            "px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-all border-none cursor-pointer",
+            "px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border-none cursor-pointer",
             curMo === i
-              ? "bg-violet-600 text-white shadow-md"
-              : dark
-              ? "text-slate-400 hover:bg-slate-700 bg-transparent"
-              : "text-slate-500 hover:bg-slate-100 bg-transparent"
+              ? "bg-surface-tertiary text-text-primary shadow-sm"
+              : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary/50 bg-transparent"
           )}
         >
           {m}

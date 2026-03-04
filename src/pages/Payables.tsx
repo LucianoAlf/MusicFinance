@@ -20,7 +20,7 @@ import { PayableBill } from "../types";
 const COLORS = ["#0ea5e9", "#f97316", "#ec4899", "#84cc16", "#64748b", "#8b5cf6", "#14b8a6", "#f43f5e"];
 
 export const Payables = () => {
-  const { data, curMo, setCurMo, dark, handleSaveBills, handleToggleBillStatus, handleDeleteBills, handleUpdateBill, handleAddCostCenter, handleAddExpenseItem } = useData();
+  const { data, curMo, setCurMo, handleSaveBills, handleToggleBillStatus, handleDeleteBills, handleUpdateBill, handleAddCostCenter, handleAddExpenseItem } = useData();
   const [showModal, setShowModal] = useState(false);
 
   // Form State
@@ -45,15 +45,9 @@ export const Payables = () => {
 
   if (!data) return null;
 
-  const cd = cn(
-    "rounded-2xl p-5 shadow-sm border",
-    dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100"
-  );
-  const inp = cn(
-    "w-full px-3 py-2.5 rounded-xl text-xs border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all",
-    dark ? "bg-slate-700 border-slate-600 text-white" : "bg-slate-50 border-slate-200 text-slate-900"
-  );
-  const lbl = cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500");
+  const cd = "rounded-xl p-4 shadow-sm border bg-surface-secondary border-border-primary";
+  const inp = "w-full px-3 py-2.5 rounded-lg text-xs border focus:outline-none focus:ring-1 focus:ring-border-hover transition-all bg-surface-tertiary border-border-secondary text-text-primary";
+  const lbl = "text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider";
 
   const curMonthBills = data.payableBills.filter((b) => {
     const d = new Date(b.dueDate + "T12:00:00");
@@ -243,38 +237,38 @@ export const Payables = () => {
   const getCcColor = (id: string) => data.expenses.find((c) => c.id === id)?.color || "#94a3b8";
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b border-border-primary pb-4">
         <div>
-          <h1 className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>Contas a Pagar</h1>
-          <p className={cn("text-xs mt-1", dark ? "text-slate-400" : "text-slate-500")}>
-            {MF[curMo]} / {data.config.year}
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Contas a Pagar</h1>
+          <p className="text-xs mt-1 text-text-secondary">
+            {MF[curMo]} · {data.config.year}
           </p>
         </div>
         <MonthSelector curMo={curMo} setCurMo={setCurMo} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className={cn("rounded-2xl p-5 shadow-sm border", dark ? "bg-slate-800/80 border-slate-700/50" : "bg-white border-slate-100")}>
-          <p className={cn("text-[11px] font-semibold mb-1", dark ? "text-slate-400" : "text-slate-500")}>Total do Mês</p>
-          <p className={cn("text-2xl font-bold", dark ? "text-white" : "text-slate-900")}>{brl(totalMonth)}</p>
+        <div className="rounded-xl p-4 shadow-sm border bg-surface-secondary border-border-primary">
+          <p className="text-[10px] font-semibold mb-1 text-text-secondary uppercase tracking-wider">Total do Mês</p>
+          <p className="text-2xl font-mono font-bold text-text-primary">{brl(totalMonth)}</p>
         </div>
-        <div className={cn("rounded-2xl p-5 shadow-sm border", dark ? "bg-emerald-900/20 border-emerald-800/30" : "bg-emerald-50 border-emerald-100")}>
-          <p className={cn("text-[11px] font-semibold mb-1", dark ? "text-emerald-400" : "text-emerald-600")}>Total Pago</p>
-          <p className={cn("text-2xl font-bold", dark ? "text-emerald-400" : "text-emerald-700")}>{brl(totalPaid)}</p>
+        <div className="rounded-xl p-4 shadow-sm border bg-surface-tertiary border-border-secondary">
+          <p className="text-[10px] font-semibold mb-1 text-accent-green uppercase tracking-wider">Total Pago</p>
+          <p className="text-2xl font-mono font-bold text-accent-green">{brl(totalPaid)}</p>
         </div>
-        <div className={cn("rounded-2xl p-5 shadow-sm border", dark ? "bg-rose-900/20 border-rose-800/30" : "bg-rose-50 border-rose-100")}>
-          <p className={cn("text-[11px] font-semibold mb-1", dark ? "text-rose-400" : "text-rose-600")}>Total Pendente</p>
-          <p className={cn("text-2xl font-bold", dark ? "text-rose-400" : "text-rose-700")}>{brl(totalPending)}</p>
+        <div className="rounded-xl p-4 shadow-sm border bg-surface-tertiary border-border-secondary">
+          <p className="text-[10px] font-semibold mb-1 text-accent-red uppercase tracking-wider">Total Pendente</p>
+          <p className="text-2xl font-mono font-bold text-accent-red">{brl(totalPending)}</p>
         </div>
       </div>
 
       <div className={cd}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className={cn("text-sm font-bold", dark ? "text-white" : "text-slate-900")}>Lançamentos de {MF[curMo]}</h3>
+          <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">Lançamentos de {MF[curMo]}</h3>
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-[11px] font-semibold shadow-lg shadow-violet-500/25 hover:shadow-xl transition-all border-none cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
           >
             <Plus size={14} /> Nova Conta
           </button>
@@ -282,11 +276,11 @@ export const Payables = () => {
 
         {curMonthBills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className={cn("w-12 h-12 rounded-full flex items-center justify-center mb-3", dark ? "bg-slate-800 text-slate-600" : "bg-slate-100 text-slate-300")}>
+            <div className="w-12 h-12 rounded-full bg-surface-tertiary flex items-center justify-center mb-3 text-text-tertiary">
               <Receipt size={24} />
             </div>
-            <p className={cn("text-sm font-medium", dark ? "text-slate-300" : "text-slate-600")}>Nenhuma conta neste mês</p>
-            <p className={cn("text-[11px] mt-1", dark ? "text-slate-500" : "text-slate-400")}>Clique em "Nova Conta" para adicionar.</p>
+            <p className="text-sm font-medium text-text-primary">Nenhuma conta neste mês</p>
+            <p className="text-[11px] mt-1 text-text-secondary">Clique em "Nova Conta" para adicionar.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -298,8 +292,8 @@ export const Payables = () => {
                   className={cn(
                     "flex items-center justify-between p-3 rounded-xl border transition-all",
                     isPaid
-                      ? dark ? "bg-emerald-900/10 border-emerald-800/30 opacity-70" : "bg-emerald-50/50 border-emerald-100 opacity-70"
-                      : dark ? "bg-slate-800/60 border-slate-700/50 hover:bg-slate-800" : "bg-white border-slate-100 hover:bg-slate-50"
+                      ? "bg-accent-green/5 border-accent-green/20 opacity-70"
+                      : "bg-surface-tertiary border-border-secondary hover:border-border-hover"
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -308,18 +302,18 @@ export const Payables = () => {
                       className={cn(
                         "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer text-[10px] font-bold",
                         isPaid
-                          ? dark ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-emerald-50 border-emerald-200 text-emerald-600"
-                          : dark ? "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                          ? "bg-accent-green/10 border-transparent text-accent-green"
+                          : "bg-surface-primary border-border-primary text-text-tertiary hover:bg-surface-tertiary"
                       )}
                     >
                       {isPaid ? <CheckCircle size={14} /> : <Circle size={14} />}
                       {isPaid ? "PAGO" : "PENDENTE"}
                     </button>
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", dark ? "bg-slate-700" : "bg-slate-100")}>
+                    <div className="w-8 h-8 rounded-lg bg-surface-primary flex items-center justify-center border border-border-primary">
                       {getTypeIcon(bill.type)}
                     </div>
                     <div>
-                      <p className={cn("text-xs font-semibold", isPaid ? (dark ? "text-emerald-400 line-through" : "text-emerald-700 line-through") : (dark ? "text-white" : "text-slate-900"))}>
+                      <p className={cn("text-xs font-semibold", isPaid ? "text-accent-green line-through" : "text-text-primary")}>
                         {bill.description}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -327,7 +321,7 @@ export const Payables = () => {
                           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getCcColor(bill.costCenterId) }}></span>
                           {getCcName(bill.costCenterId)}
                         </span>
-                        <span className={cn("text-[9px] flex items-center gap-1", dark ? "text-slate-500" : "text-slate-400")}>
+                        <span className="text-[9px] flex items-center gap-1 text-text-secondary font-mono">
                           <CalendarIcon size={10} />
                           {bill.dueDate.split("-").reverse().join("/")}
                         </span>
@@ -339,14 +333,14 @@ export const Payables = () => {
                       className="cursor-pointer hover:opacity-80 transition-all text-right"
                       onClick={() => { setEditingBill(bill); setEditAmount(bill.amount.toString()); setEditDate(bill.dueDate); }}
                     >
-                      <p className={cn("text-sm font-bold", isPaid ? (dark ? "text-emerald-500" : "text-emerald-600") : (dark ? "text-white" : "text-slate-900"))}>
+                      <p className={cn("text-sm font-mono font-bold", isPaid ? "text-accent-green" : "text-text-primary")}>
                         {brl(bill.amount)}
                       </p>
-                      <p className={cn("text-[9px] underline", dark ? "text-slate-500" : "text-slate-400")}>Editar</p>
+                      <p className="text-[9px] underline text-text-tertiary">Editar</p>
                     </div>
                     <button
                       onClick={() => deleteBill(bill.id)}
-                      className="p-1.5 rounded-md text-rose-400 hover:text-rose-600 hover:bg-rose-500/10 transition-all border-none bg-transparent cursor-pointer"
+                      className="p-1.5 rounded-md text-text-tertiary hover:text-accent-red hover:bg-accent-red/10 transition-all border-none bg-transparent cursor-pointer"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -363,7 +357,6 @@ export const Payables = () => {
         open={showModal}
         onOpenChange={(v) => { if (!v) { setShowModal(false); resetForm(); } }}
         title="Nova Conta a Pagar"
-        dark={dark}
         size="md"
       >
         <div className="space-y-4">
@@ -372,22 +365,22 @@ export const Payables = () => {
             <input value={desc} onChange={(e) => setDesc(e.target.value)} className={inp} placeholder="Ex: Conta de Luz" autoFocus />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lbl}>Valor Total (R$)</label>
               <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={inp} placeholder="0,00" />
             </div>
             <div>
               <label className={lbl}>Vencimento</label>
-              <DatePicker value={dueDate} onChange={setDueDate} dark={dark} />
+              <DatePicker value={dueDate} onChange={setDueDate} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className={lbl}>Centro de Custo</label>
-                <button onClick={() => setIsNewCc(!isNewCc)} className="text-[9px] text-violet-500 font-semibold border-none bg-transparent cursor-pointer">
+                <button onClick={() => setIsNewCc(!isNewCc)} className="text-[9px] text-accent-blue font-semibold border-none bg-transparent cursor-pointer">
                   {isNewCc ? "Selecionar" : "+ Novo Centro"}
                 </button>
               </div>
@@ -399,14 +392,13 @@ export const Payables = () => {
                   onValueChange={(v) => { setCcId(v); setEiId(""); }}
                   options={ccOptions}
                   placeholder="Selecione..."
-                  dark={dark}
                 />
               )}
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Item de Despesa <span className={cn("font-normal", dark ? "text-slate-600" : "text-slate-400")}>(opcional)</span></label>
-                <button onClick={() => setIsNewEi(!isNewEi)} className="text-[9px] text-violet-500 font-semibold border-none bg-transparent cursor-pointer">
+                <label className={lbl}>Item de Despesa <span className="font-normal text-text-tertiary">(opcional)</span></label>
+                <button onClick={() => setIsNewEi(!isNewEi)} className="text-[9px] text-accent-blue font-semibold border-none bg-transparent cursor-pointer">
                   {isNewEi ? "Selecionar" : "+ Novo Item"}
                 </button>
               </div>
@@ -419,7 +411,6 @@ export const Payables = () => {
                   options={eiOptions}
                   placeholder={eiOptions.length === 0 && ccId ? "Nenhum item — crie um" : "Selecione..."}
                   disabled={!ccId || isNewCc}
-                  dark={dark}
                 />
               )}
             </div>
@@ -438,10 +429,10 @@ export const Payables = () => {
                   key={t.id}
                   onClick={() => setType(t.id as typeof type)}
                   className={cn(
-                    "flex items-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer text-[11px] font-semibold",
+                    "flex items-center gap-2 p-2.5 rounded-lg border transition-colors cursor-pointer text-[11px] font-semibold",
                     type === t.id
-                      ? dark ? "bg-violet-900/30 border-violet-500 text-violet-400" : "bg-violet-50 border-violet-500 text-violet-700"
-                      : dark ? "bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      ? "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
+                      : "bg-surface-tertiary border-transparent text-text-secondary hover:text-text-primary"
                   )}
                 >
                   <t.icon size={14} /> {t.label}
@@ -454,7 +445,7 @@ export const Payables = () => {
             <div>
               <label className={lbl}>Número de Parcelas</label>
               <input type="number" value={installments} onChange={(e) => setInstallments(e.target.value)} className={inp} min="2" max="48" />
-              <p className={cn("text-[9px] mt-1", dark ? "text-slate-500" : "text-slate-400")}>O valor total será dividido por {installments || 2}.</p>
+              <p className="text-[9px] mt-1 text-text-tertiary">O valor total será dividido por {installments || 2}.</p>
             </div>
           )}
         </div>
@@ -462,7 +453,7 @@ export const Payables = () => {
         <div className="flex gap-2 mt-6">
           <button
             onClick={handleSaveBill}
-            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-violet-500/25 hover:shadow-xl transition-all border-none cursor-pointer"
+            className="flex-1 py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Salvar Conta
           </button>
@@ -474,10 +465,9 @@ export const Payables = () => {
         open={!!editingBill}
         onOpenChange={(v) => { if (!v) setEditingBill(null); }}
         title="Editar Conta"
-        dark={dark}
         size="sm"
       >
-        <p className={cn("text-xs font-semibold mb-4 -mt-2", dark ? "text-slate-300" : "text-slate-700")}>{editingBill?.description}</p>
+        <p className="text-xs font-semibold mb-4 -mt-2 text-text-secondary">{editingBill?.description}</p>
         <div className="space-y-4">
           <div>
             <label className={lbl}>Valor (R$)</label>
@@ -485,13 +475,13 @@ export const Payables = () => {
           </div>
           <div>
             <label className={lbl}>Vencimento</label>
-            <DatePicker value={editDate} onChange={setEditDate} dark={dark} />
+            <DatePicker value={editDate} onChange={setEditDate} />
           </div>
         </div>
         <div className="flex gap-2 mt-6">
           <button
             onClick={saveEdit}
-            className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-bold shadow-lg border-none cursor-pointer"
+            className="flex-1 py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Salvar
           </button>
@@ -507,7 +497,6 @@ export const Payables = () => {
         confirmLabel={confirmState.confirmLabel}
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
-        dark={dark}
       />
     </div>
   );

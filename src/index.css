@@ -33,3 +33,55 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
 }
 
+/* ─── Radix UI component animations ───────────────────────────────────────── */
+
+@keyframes slideDownAndFade {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes slideUpAndFade {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Select dropdown */
+.select-content-animation[data-state='open'] {
+  animation: slideDownAndFade 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.select-content-animation[data-state='closed'] {
+  animation: slideUpAndFade 120ms ease-in;
+}
+
+/* DatePicker popover */
+.datepicker-content-animation[data-state='open'] {
+  animation: slideDownAndFade 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.datepicker-content-animation[data-state='closed'] {
+  animation: slideUpAndFade 120ms ease-in;
+}
+
+/* Modal overlay + content */
+.modal-overlay[data-state='open'] {
+  animation: modalFadeIn 200ms ease-out;
+}
+.modal-overlay[data-state='closed'] {
+  animation: modalFadeIn 150ms ease-in reverse;
+}
+.modal-content[data-state='open'] {
+  animation: modalScaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-content[data-state='closed'] {
+  animation: modalScaleIn 150ms ease-in reverse;
+}
+

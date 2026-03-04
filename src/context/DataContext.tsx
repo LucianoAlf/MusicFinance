@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { DashboardData, PayableBill, ViewKpis } from "../types";
+import { DashboardData, Instrument, Payment, PaymentStatus, PayableBill, ViewKpis } from "../types";
 import { useAuth } from "./AuthContext";
 import { MS } from "../lib/utils";
 import {
@@ -8,14 +8,17 @@ import {
   loadBreakeven,
   loadAvgTenure,
   addProfessor as apiAddProfessor,
+  updateProfessor as apiUpdateProfessor,
   deleteProfessor as apiDeleteProfessor,
   addStudent as apiAddStudent,
   updateStudent as apiUpdateStudent,
   deleteStudent as apiDeleteStudent,
   upsertPayment as apiUpsertPayment,
   addCostCenter as apiAddCostCenter,
+  updateCostCenter as apiUpdateCostCenter,
   deleteCostCenter as apiDeleteCostCenter,
   addExpenseItem as apiAddExpenseItem,
+  updateExpenseItem as apiUpdateExpenseItem,
   deleteExpenseItem as apiDeleteExpenseItem,
   upsertExpense as apiUpsertExpense,
   upsertRevenue as apiUpsertRevenue,
@@ -24,6 +27,10 @@ import {
   deleteBills as apiDeleteBills,
   updateSchoolConfig as apiUpdateSchoolConfig,
   resetSchoolData as apiResetSchoolData,
+  addInstrument as apiAddInstrument,
+  deleteInstrument as apiDeleteInstrument,
+  addProfessorInstrument as apiAddProfInst,
+  removeProfessorInstrument as apiRemoveProfInst,
   type SlugMap,
 } from "../lib/supabaseData";
 
@@ -32,6 +39,7 @@ type SaveStatus = "saving" | "saved" | "idle" | "error";
 interface DataContextType {
   data: DashboardData | null;
   setData: React.Dispatch<React.SetStateAction<DashboardData | null>>;
+  instruments: Instrument[];
   dark: boolean;
   setDark: React.Dispatch<React.SetStateAction<boolean>>;
   page: string;
@@ -46,15 +54,23 @@ interface DataContextType {
   setSelPay: React.Dispatch<React.SetStateAction<string | null>>;
   calcMo: (m: number) => any;
   saveStatus: SaveStatus;
-  handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number }) => Promise<void>;
+  handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<void>;
+  handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string }) => Promise<void>;
-  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string }) => Promise<void>;
+  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) => Promise<void>;
+  handleAddInstrument: (name: string) => Promise<Instrument | null>;
+  handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
+  handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleDeleteStudent: (profId: string, studentId: string) => Promise<void>;
-  handleUpdatePayment: (profId: string, studentId: string, month: number, value: string) => Promise<void>;
+  handleConfirmPayment: (profId: string, studentId: string, month: number, amount: number) => Promise<void>;
+  handleWaivePayment: (profId: string, studentId: string, month: number) => Promise<void>;
+  handleRevertPayment: (profId: string, studentId: string, month: number, expectedAmount: number) => Promise<void>;
   handleAddCostCenter: (d: { name: string; color: string }) => Promise<string>;
+  handleUpdateCostCenter: (ccId: string, updates: { name?: string; color?: string }) => Promise<void>;
   handleDeleteCostCenter: (ccId: string) => Promise<void>;
   handleAddExpenseItem: (ccId: string, d: { name: string; type: "F" | "V" }) => Promise<string>;
+  handleUpdateExpenseItem: (ccId: string, eiId: string, updates: { name?: string; type?: "F" | "V" }) => Promise<void>;
   handleDeleteExpenseItem: (ccId: string, eiId: string) => Promise<void>;
   handleUpdateExpense: (ccId: string, eiId: string, month: number, amount: number) => Promise<void>;
   handleUpdateRevenue: (slug: string, month: number, amount: number) => Promise<void>;
@@ -74,6 +90,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { selectedSchool } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [loading, setLoading] = useState(true);
   const [dark, setDark] = useState(false);
   const [page, setPage] = useState("dash");
@@ -110,6 +127,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (result.data) {
       setData(result.data);
       slugMapRef.current = result.slugMap;
+      setInstruments(result.instruments);
     }
     setLoading(false);
   }, [schoolId]);
@@ -158,8 +176,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (data.professors || []).forEach((p) => {
       let pay = 0;
       (p.students || []).forEach((s) => {
-        const v = s.payments && s.payments[m];
-        if (v && v > 0) { tui += v; pay++; ps++; }
+        const pm = s.payments && s.payments[m];
+        if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; pay++; ps++; }
       });
       pp += pay * p.costPerStudent;
     });
@@ -174,13 +192,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ─── Write handlers ────────────────────────────────────────────────────
 
-  const handleAddProfessor = async (d: { name: string; instrument: string; costPerStudent: number }) => {
+  const handleAddProfessor = async (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiAddProfessor(schoolId, d);
     if (error || !row) { markError(); return; }
-    setData((prev) => prev ? { ...prev, professors: [...prev.professors, { id: row.id, name: row.name, instrument: row.instrument || "", costPerStudent: Number(row.cost_per_student), students: [] }] } : prev);
+    const profInsts = (d.instrumentIds || []).map(iid => {
+      const inst = instruments.find(i => i.id === iid);
+      return { id: iid, name: inst?.name || "" };
+    });
+    setData((prev) => prev ? { ...prev, professors: [...prev.professors, { id: row.id, name: row.name, instrument: row.instrument || "", costPerStudent: Number(row.cost_per_student), instruments: profInsts, students: [] }] } : prev);
     setSelProf(row.id);
+    markSaved();
+  };
+
+  const handleUpdateProfessor = async (profId: string, updates: { name?: string; costPerStudent?: number }) => {
+    if (!data || !schoolId) return;
+    markSaving();
+    const { data: row, error } = await apiUpdateProfessor(profId, updates);
+    if (error || !row) { markError(); return; }
+    setData((prev) => prev ? {
+      ...prev,
+      professors: prev.professors.map((p) => p.id === profId ? {
+        ...p,
+        name: row.name ?? p.name,
+        costPerStudent: Number(row.cost_per_student) ?? p.costPerStudent,
+      } : p),
+    } : prev);
     markSaved();
   };
 
@@ -194,27 +232,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string }) => {
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const tuitionVal = d.tuition || data.config.tuition;
     const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
-    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate });
+    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId });
     if (error || !row) { markError(); return; }
 
-    const payments12 = Array(12).fill(tuitionVal);
+    const payments12: (Payment | null)[] = [];
     const paymentInserts = [];
     for (let m = 0; m < 12; m++) {
-      paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PAID" });
+      paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PENDING", paidAt: null });
+      payments12.push({ amount: tuitionVal, status: "PENDING" as PaymentStatus });
     }
     for (const pi of paymentInserts) await apiUpsertPayment(pi);
 
-    const newStudent = { id: row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal };
+    const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
+    const newStudent = { id: row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName };
     setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
     markSaved();
   };
 
-  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number }) => {
+  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateStudent(studentId, updates);
@@ -234,6 +274,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             enrollmentDate: row.enrollment_date || undefined,
             exitDate: row.exit_date || undefined,
             tuitionAmount: row.tuition_amount ? Number(row.tuition_amount) : s.tuitionAmount,
+            instrumentId: row.instrument_id || s.instrumentId,
+            instrumentName: row.instrument_id ? instruments.find(i => i.id === row.instrument_id)?.name : s.instrumentName,
           } : s),
         })),
       };
@@ -250,16 +292,39 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleUpdatePayment = async (profId: string, studentId: string, month: number, value: string) => {
+  const handleConfirmPayment = async (profId: string, studentId: string, month: number, amount: number) => {
     if (!data || !schoolId) return;
-    const numVal = value === "" ? null : Number(value);
+    const paidAt = new Date().toISOString();
     setData((prev) => {
       if (!prev) return prev;
-      return { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: p.students.map((s) => s.id === studentId ? { ...s, payments: s.payments.map((pay, i) => i === month ? numVal : pay) } : s) } : p) };
+      return { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: p.students.map((s) => s.id === studentId ? { ...s, payments: s.payments.map((pay, i) => i === month ? { amount, status: "PAID" as PaymentStatus } : pay) } : s) } : p) };
     });
     markSaving();
-    const status = numVal === null || numVal === 0 ? "PENDING" : "PAID";
-    const { error } = await apiUpsertPayment({ studentId, schoolId, year: data.config.year, month: month + 1, amount: numVal, status });
+    const { error } = await apiUpsertPayment({ studentId, schoolId, year: data.config.year, month: month + 1, amount, status: "PAID", paidAt });
+    if (error) { markError(); return; }
+    markSaved();
+  };
+
+  const handleWaivePayment = async (profId: string, studentId: string, month: number) => {
+    if (!data || !schoolId) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      return { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: p.students.map((s) => s.id === studentId ? { ...s, payments: s.payments.map((pay, i) => i === month ? { amount: 0, status: "WAIVED" as PaymentStatus } : pay) } : s) } : p) };
+    });
+    markSaving();
+    const { error } = await apiUpsertPayment({ studentId, schoolId, year: data.config.year, month: month + 1, amount: 0, status: "WAIVED", paidAt: null });
+    if (error) { markError(); return; }
+    markSaved();
+  };
+
+  const handleRevertPayment = async (profId: string, studentId: string, month: number, expectedAmount: number) => {
+    if (!data || !schoolId) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      return { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: p.students.map((s) => s.id === studentId ? { ...s, payments: s.payments.map((pay, i) => i === month ? { amount: expectedAmount, status: "PENDING" as PaymentStatus } : pay) } : s) } : p) };
+    });
+    markSaving();
+    const { error } = await apiUpsertPayment({ studentId, schoolId, year: data.config.year, month: month + 1, amount: expectedAmount, status: "PENDING", paidAt: null });
     if (error) { markError(); return; }
     markSaved();
   };
@@ -272,6 +337,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setData((prev) => prev ? { ...prev, expenses: [...prev.expenses, { id: row.id, name: row.name, color: row.color, items: [] }] } : prev);
     markSaved();
     return row.id;
+  };
+
+  const handleUpdateCostCenter = async (ccId: string, updates: { name?: string; color?: string }) => {
+    if (!data) return;
+    markSaving();
+    const { data: row, error } = await apiUpdateCostCenter(ccId, updates);
+    if (error || !row) { markError(); return; }
+    setData((prev) => prev ? {
+      ...prev,
+      expenses: prev.expenses.map((cc) => cc.id === ccId ? { ...cc, name: row.name ?? cc.name, color: row.color ?? cc.color } : cc),
+    } : prev);
+    markSaved();
   };
 
   const handleDeleteCostCenter = async (ccId: string) => {
@@ -294,6 +371,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     markSaved();
     return row.id;
+  };
+
+  const handleUpdateExpenseItem = async (ccId: string, eiId: string, updates: { name?: string; type?: "F" | "V" }) => {
+    if (!data) return;
+    markSaving();
+    const { data: row, error } = await apiUpdateExpenseItem(eiId, { name: updates.name, expenseType: updates.type });
+    if (error || !row) { markError(); return; }
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        expenses: prev.expenses.map((cc) => cc.id === ccId ? {
+          ...cc,
+          items: cc.items.map((it) => it.id === eiId ? {
+            ...it,
+            name: row.name ?? it.name,
+            type: (row.expense_type === "F" ? "F" : "V") as "F" | "V",
+          } : it),
+        } : cc),
+      };
+    });
+    markSaved();
   };
 
   const handleDeleteExpenseItem = async (ccId: string, eiId: string) => {
@@ -450,6 +549,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
+  const handleAddInstrument = async (name: string): Promise<Instrument | null> => {
+    if (!schoolId) return null;
+    markSaving();
+    const { data: row, error } = await apiAddInstrument(schoolId, name);
+    if (error || !row) { markError(); return null; }
+    const inst = { id: row.id, name: row.name };
+    setInstruments(prev => [...prev, inst].sort((a, b) => a.name.localeCompare(b.name)));
+    markSaved();
+    return inst;
+  };
+
+  const handleAddProfessorInstrument = async (profId: string, instrumentId: string) => {
+    if (!data) return;
+    markSaving();
+    const { error } = await apiAddProfInst(profId, instrumentId);
+    if (error) { markError(); return; }
+    const inst = instruments.find(i => i.id === instrumentId);
+    if (inst) {
+      setData(prev => prev ? { ...prev, professors: prev.professors.map(p => p.id === profId ? { ...p, instruments: [...p.instruments, inst] } : p) } : prev);
+    }
+    markSaved();
+  };
+
+  const handleRemoveProfessorInstrument = async (profId: string, instrumentId: string) => {
+    if (!data) return;
+    markSaving();
+    const { error } = await apiRemoveProfInst(profId, instrumentId);
+    if (error) { markError(); return; }
+    setData(prev => prev ? { ...prev, professors: prev.professors.map(p => p.id === profId ? { ...p, instruments: p.instruments.filter(i => i.id !== instrumentId) } : p) } : prev);
+    markSaved();
+  };
+
   const handleUpdateConfig = async (key: string, value: string | number) => {
     if (!data || !schoolId) return;
     setData((prev) => prev ? { ...prev, config: { ...prev.config, [key]: value } } : prev);
@@ -477,13 +608,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <DataContext.Provider
       value={{
-        data, setData, dark, setDark, page, setPage, sideCol, setSideCol,
+        data, setData, instruments, dark, setDark, page, setPage, sideCol, setSideCol,
         curMo, setCurMo, selProf, setSelProf, selPay, setSelPay,
         calcMo, saveStatus,
-        handleAddProfessor, handleDeleteProfessor,
-        handleAddStudent, handleUpdateStudent, handleDeleteStudent, handleUpdatePayment,
-        handleAddCostCenter, handleDeleteCostCenter,
-        handleAddExpenseItem, handleDeleteExpenseItem, handleUpdateExpense,
+        handleAddProfessor, handleUpdateProfessor, handleDeleteProfessor,
+        handleAddStudent, handleUpdateStudent, handleDeleteStudent,
+        handleConfirmPayment, handleWaivePayment, handleRevertPayment,
+        handleAddInstrument, handleAddProfessorInstrument, handleRemoveProfessorInstrument,
+        handleAddCostCenter, handleUpdateCostCenter, handleDeleteCostCenter,
+        handleAddExpenseItem, handleUpdateExpenseItem, handleDeleteExpenseItem, handleUpdateExpense,
         handleUpdateRevenue,
         handleSaveBills, handleUpdateBill, handleDeleteBills, handleToggleBillStatus,
         handleUpdateConfig, handleResetData, refreshData,

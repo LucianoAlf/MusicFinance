@@ -1,10 +1,13 @@
 import React from "react";
 import { useData } from "../context/DataContext";
+import { ConfirmModal, useConfirm } from "../components/ui";
 import { cn } from "../lib/utils";
 import { School, BarChart, AlertTriangle, RefreshCw } from "lucide-react";
 
 export const Config = () => {
   const { data, dark, handleUpdateConfig, handleResetData } = useData();
+  const { state: confirmState, confirm, close: confirmClose } = useConfirm();
+
   if (!data) return null;
 
   const cd = cn(
@@ -20,10 +23,14 @@ export const Config = () => {
     handleUpdateConfig(k, v);
   };
 
-  const handleReset = async () => {
-    if (confirm("Resetar TODOS os dados desta escola? Centros de custo e categorias de receita serao recriados com valores padrao.")) {
-      await handleResetData();
-    }
+  const handleReset = () => {
+    confirm({
+      title: "Resetar Dados",
+      message: "Resetar TODOS os dados desta escola? Centros de custo e categorias de receita serão recriados com valores padrão. Esta ação não pode ser desfeita.",
+      confirmLabel: "Resetar",
+      variant: "danger",
+      onConfirm: () => handleResetData(),
+    });
   };
 
   return (
@@ -88,32 +95,17 @@ export const Config = () => {
           <BarChart size={14} /> Estatisticas
         </h3>
         <div className="grid grid-cols-3 gap-3 text-center">
-          <div
-            className={cn(
-              "p-4 rounded-xl border",
-              dark ? "bg-violet-900/20 border-violet-800/30" : "bg-violet-50 border-violet-100"
-            )}
-          >
+          <div className={cn("p-4 rounded-xl border", dark ? "bg-violet-900/20 border-violet-800/30" : "bg-violet-50 border-violet-100")}>
             <p className={cn("text-2xl font-bold", dark ? "text-violet-400" : "text-violet-700")}>{data.professors.length}</p>
             <p className={cn("text-[10px] mt-1", dark ? "text-slate-400" : "text-slate-500")}>Professores</p>
           </div>
-          <div
-            className={cn(
-              "p-4 rounded-xl border",
-              dark ? "bg-emerald-900/20 border-emerald-800/30" : "bg-emerald-50 border-emerald-100"
-            )}
-          >
+          <div className={cn("p-4 rounded-xl border", dark ? "bg-emerald-900/20 border-emerald-800/30" : "bg-emerald-50 border-emerald-100")}>
             <p className={cn("text-2xl font-bold", dark ? "text-emerald-400" : "text-emerald-700")}>
               {data.professors.reduce((s, p) => s + p.students.length, 0)}
             </p>
             <p className={cn("text-[10px] mt-1", dark ? "text-slate-400" : "text-slate-500")}>Alunos</p>
           </div>
-          <div
-            className={cn(
-              "p-4 rounded-xl border",
-              dark ? "bg-blue-900/20 border-blue-800/30" : "bg-blue-50 border-blue-100"
-            )}
-          >
+          <div className={cn("p-4 rounded-xl border", dark ? "bg-blue-900/20 border-blue-800/30" : "bg-blue-50 border-blue-100")}>
             <p className={cn("text-2xl font-bold", dark ? "text-blue-400" : "text-blue-700")}>
               {data.expenses.reduce((s, cc) => s + cc.items.length, 0)}
             </p>
@@ -136,6 +128,17 @@ export const Config = () => {
           <RefreshCw size={12} /> Resetar
         </button>
       </div>
+
+      <ConfirmModal
+        open={confirmState.open}
+        onOpenChange={confirmClose}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        variant={confirmState.variant}
+        onConfirm={confirmState.onConfirm}
+        dark={dark}
+      />
     </div>
   );
 };

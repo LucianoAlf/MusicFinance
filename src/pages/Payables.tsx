@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "../context/DataContext";
+import { MonthSelector } from "../components/MonthSelector";
+import { Select, DatePicker, Modal, ConfirmModal, useConfirm } from "../components/ui";
 import { brl, MS, MF, cn } from "../lib/utils";
 import {
   Plus,
@@ -39,6 +41,8 @@ export const Payables = () => {
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState("");
 
+  const { state: confirmState, confirm, close: confirmClose } = useConfirm();
+
   if (!data) return null;
 
   const cd = cn(
@@ -49,6 +53,7 @@ export const Payables = () => {
     "w-full px-3 py-2.5 rounded-xl text-xs border-2 focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all",
     dark ? "bg-slate-700 border-slate-600 text-white" : "bg-slate-50 border-slate-200 text-slate-900"
   );
+  const lbl = cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500");
 
   const curMonthBills = data.payableBills.filter((b) => {
     const d = new Date(b.dueDate + "T12:00:00");
@@ -59,10 +64,15 @@ export const Payables = () => {
   const totalPaid = curMonthBills.filter((b) => b.status === "PAID").reduce((acc, b) => acc + b.amount, 0);
   const totalPending = totalMonth - totalPaid;
 
+  // Build select options for categories and expense items
+  const ccOptions = data.expenses.map((cc) => ({ value: cc.id, label: cc.name }));
+  const eiOptions = ccId
+    ? (data.expenses.find((c) => c.id === ccId)?.items.map((ei) => ({ value: ei.id, label: ei.name })) || [])
+    : [];
+
   const handleSaveBill = async () => {
     if (!desc.trim() || !amount || !dueDate) return;
     if (!isNewCc && !ccId) return;
-    if (!isNewEi && !eiId) return;
     if (isNewCc && !newCcName.trim()) return;
     if (isNewEi && !newEiName.trim()) return;
 
@@ -89,6 +99,8 @@ export const Payables = () => {
     const groupId = "grp" + Date.now();
     const baseAmount = Number(amount);
 
+    const hasExpenseItem = !!finalEiId;
+
     if (type === "UNIQUE") {
       billsToCreate.push({
         id: "temp",
@@ -100,7 +112,7 @@ export const Payables = () => {
         dueDate: dueDate,
         status: "PENDING",
       });
-      if (startYear === data.config.year) {
+      if (hasExpenseItem && startYear === data.config.year) {
         expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: startMonth, delta: baseAmount });
       }
     } else if (type === "INSTALLMENT") {
@@ -123,7 +135,7 @@ export const Payables = () => {
             status: "PENDING",
             groupId,
           });
-          expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: d.getMonth(), delta: installmentAmount });
+          if (hasExpenseItem) expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: d.getMonth(), delta: installmentAmount });
         }
       }
     } else {
@@ -141,7 +153,7 @@ export const Payables = () => {
           status: "PENDING",
           groupId,
         });
-        expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: i, delta: baseAmount });
+        if (hasExpenseItem) expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: i, delta: baseAmount });
       }
     }
 
@@ -151,51 +163,50 @@ export const Payables = () => {
   };
 
   const resetForm = () => {
-    setDesc("");
-    setAmount("");
-    setDueDate("");
-    setCcId("");
-    setEiId("");
-    setType("UNIQUE");
-    setInstallments("2");
-    setIsNewCc(false);
-    setNewCcName("");
-    setIsNewEi(false);
-    setNewEiName("");
+    setDesc(""); setAmount(""); setDueDate(""); setCcId(""); setEiId("");
+    setType("UNIQUE"); setInstallments("2");
+    setIsNewCc(false); setNewCcName(""); setIsNewEi(false); setNewEiName("");
   };
 
-  const toggleStatus = (billId: string) => {
-    handleToggleBillStatus(billId);
-  };
+  const toggleStatus = (billId: string) => { handleToggleBillStatus(billId); };
 
-  const deleteBill = async (billId: string) => {
-    const bill = data.payableBills.find((b) => b.id === billId);
-    if (!bill) return;
-
-    let deleteAll = false;
-    if (bill.groupId) {
-      deleteAll = confirm("Esta conta faz parte de uma serie. Deseja excluir todas as contas futuras desta serie?");
-    } else {
-      if (!confirm("Excluir esta conta?")) return;
-    }
-
-    let billsToRemove = [bill];
-    if (deleteAll && bill.groupId) {
-      billsToRemove = data.payableBills.filter((b) => {
-        if (b.groupId !== bill.groupId) return false;
-        return new Date(b.dueDate + "T12:00:00") >= new Date(bill.dueDate + "T12:00:00");
-      });
-    }
-
+  const performDeleteBills = async (bills: PayableBill[]) => {
     const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
-    billsToRemove.forEach((b) => {
+    bills.forEach((b) => {
       const billMonth = new Date(b.dueDate + "T12:00:00").getMonth();
       if (b.costCenterId && b.expenseItemId) {
         expenseUpdates.push({ ccId: b.costCenterId, eiId: b.expenseItemId, month: billMonth, delta: -b.amount });
       }
     });
+    await handleDeleteBills(bills.map((b) => b.id), expenseUpdates);
+  };
 
-    await handleDeleteBills(billsToRemove.map((b) => b.id), expenseUpdates);
+  const deleteBill = (billId: string) => {
+    const bill = data.payableBills.find((b) => b.id === billId);
+    if (!bill) return;
+
+    if (bill.groupId) {
+      confirm({
+        title: "Excluir Série",
+        message: "Esta conta faz parte de uma série. Deseja excluir esta e todas as contas futuras da série?",
+        confirmLabel: "Excluir Série",
+        variant: "danger",
+        onConfirm: () => {
+          const futureBills = data.payableBills.filter(
+            (b) => b.groupId === bill.groupId && new Date(b.dueDate + "T12:00:00") >= new Date(bill.dueDate + "T12:00:00")
+          );
+          performDeleteBills(futureBills);
+        },
+      });
+    } else {
+      confirm({
+        title: "Excluir Conta",
+        message: "Tem certeza que deseja excluir esta conta?",
+        confirmLabel: "Excluir",
+        variant: "danger",
+        onConfirm: () => performDeleteBills([bill]),
+      });
+    }
   };
 
   const saveEdit = async () => {
@@ -221,14 +232,10 @@ export const Payables = () => {
 
   const getTypeIcon = (t: string) => {
     switch (t) {
-      case "RECURRENT_FIXED":
-        return <Repeat size={14} className="text-blue-500" />;
-      case "RECURRENT_VARIABLE":
-        return <Zap size={14} className="text-amber-500" />;
-      case "INSTALLMENT":
-        return <CreditCard size={14} className="text-purple-500" />;
-      default:
-        return <Receipt size={14} className="text-slate-500" />;
+      case "RECURRENT_FIXED":    return <Repeat size={14} className="text-blue-500" />;
+      case "RECURRENT_VARIABLE": return <Zap size={14} className="text-amber-500" />;
+      case "INSTALLMENT":        return <CreditCard size={14} className="text-purple-500" />;
+      default:                   return <Receipt size={14} className="text-slate-500" />;
     }
   };
 
@@ -300,7 +307,7 @@ export const Payables = () => {
                       onClick={() => toggleStatus(bill.id)}
                       className={cn(
                         "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer text-[10px] font-bold",
-                        isPaid 
+                        isPaid
                           ? dark ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-emerald-50 border-emerald-200 text-emerald-600"
                           : dark ? "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
                       )}
@@ -328,13 +335,9 @@ export const Payables = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div 
+                    <div
                       className="cursor-pointer hover:opacity-80 transition-all text-right"
-                      onClick={() => {
-                        setEditingBill(bill);
-                        setEditAmount(bill.amount.toString());
-                        setEditDate(bill.dueDate);
-                      }}
+                      onClick={() => { setEditingBill(bill); setEditAmount(bill.amount.toString()); setEditDate(bill.dueDate); }}
                     >
                       <p className={cn("text-sm font-bold", isPaid ? (dark ? "text-emerald-500" : "text-emerald-600") : (dark ? "text-white" : "text-slate-900"))}>
                         {brl(bill.amount)}
@@ -355,152 +358,157 @@ export const Payables = () => {
         )}
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className={cn("w-full max-w-md rounded-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]", dark ? "bg-slate-800" : "bg-white")}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className={cn("text-lg font-bold flex items-center gap-2", dark ? "text-white" : "text-slate-900")}>
-                <Receipt size={20} className="text-violet-500" /> Nova Conta a Pagar
-              </h3>
-              <button onClick={() => setShowModal(false)} className={cn("p-1 rounded-md border-none cursor-pointer", dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100")}>
-                <X size={18} />
-              </button>
+      {/* Modal Nova Conta */}
+      <Modal
+        open={showModal}
+        onOpenChange={(v) => { if (!v) { setShowModal(false); resetForm(); } }}
+        title="Nova Conta a Pagar"
+        dark={dark}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Descrição</label>
+            <input value={desc} onChange={(e) => setDesc(e.target.value)} className={inp} placeholder="Ex: Conta de Luz" autoFocus />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor Total (R$)</label>
+              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={inp} placeholder="0,00" />
             </div>
+            <div>
+              <label className={lbl}>Vencimento</label>
+              <DatePicker value={dueDate} onChange={setDueDate} dark={dark} />
+            </div>
+          </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Descrição</label>
-                <input value={desc} onChange={(e) => setDesc(e.target.value)} className={inp} placeholder="Ex: Conta de Luz" autoFocus />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={lbl}>Centro de Custo</label>
+                <button onClick={() => setIsNewCc(!isNewCc)} className="text-[9px] text-violet-500 font-semibold border-none bg-transparent cursor-pointer">
+                  {isNewCc ? "Selecionar" : "+ Novo Centro"}
+                </button>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Valor Total (R$)</label>
-                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={inp} placeholder="0,00" />
-                </div>
-                <div>
-                  <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Vencimento</label>
-                  <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inp} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={cn("text-[10px] font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Categoria</label>
-                    <button onClick={() => setIsNewCc(!isNewCc)} className="text-[9px] text-violet-500 font-semibold border-none bg-transparent cursor-pointer">
-                      {isNewCc ? "Selecionar" : "+ Nova"}
-                    </button>
-                  </div>
-                  {isNewCc ? (
-                    <input value={newCcName} onChange={(e) => setNewCcName(e.target.value)} className={inp} placeholder="Nome da Categoria" />
-                  ) : (
-                    <select value={ccId} onChange={(e) => { setCcId(e.target.value); setEiId(""); }} className={inp}>
-                      <option value="" disabled>Selecione...</option>
-                      {data.expenses.map((cc) => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
-                    </select>
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={cn("text-[10px] font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Subcategoria</label>
-                    <button onClick={() => setIsNewEi(!isNewEi)} className="text-[9px] text-violet-500 font-semibold border-none bg-transparent cursor-pointer">
-                      {isNewEi ? "Selecionar" : "+ Nova"}
-                    </button>
-                  </div>
-                  {isNewEi ? (
-                    <input value={newEiName} onChange={(e) => setNewEiName(e.target.value)} className={inp} placeholder="Nome da Subcategoria" />
-                  ) : (
-                    <select value={eiId} onChange={(e) => setEiId(e.target.value)} className={inp} disabled={!ccId || isNewCc}>
-                      <option value="" disabled>Selecione...</option>
-                      {data.expenses.find((c) => c.id === ccId)?.items.map((ei) => <option key={ei.id} value={ei.id}>{ei.name}</option>)}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className={cn("text-[10px] mb-2 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Tipo de Conta</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "UNIQUE", label: "Única", icon: Receipt },
-                    { id: "RECURRENT_FIXED", label: "Fixa", icon: Repeat },
-                    { id: "RECURRENT_VARIABLE", label: "Variável", icon: Zap },
-                    { id: "INSTALLMENT", label: "Parcelada", icon: CreditCard },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setType(t.id as any)}
-                      className={cn(
-                        "flex items-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer text-[11px] font-semibold",
-                        type === t.id
-                          ? dark ? "bg-violet-900/30 border-violet-500 text-violet-400" : "bg-violet-50 border-violet-500 text-violet-700"
-                          : dark ? "bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      )}
-                    >
-                      <t.icon size={14} /> {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {type === "INSTALLMENT" && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Número de Parcelas</label>
-                  <input type="number" value={installments} onChange={(e) => setInstallments(e.target.value)} className={inp} min="2" max="48" />
-                  <p className={cn("text-[9px] mt-1", dark ? "text-slate-500" : "text-slate-400")}>O valor total será dividido por {installments || 2}.</p>
-                </div>
+              {isNewCc ? (
+                <input value={newCcName} onChange={(e) => setNewCcName(e.target.value)} className={inp} placeholder="Ex: Pessoal, Admin..." />
+              ) : (
+                <Select
+                  value={ccId}
+                  onValueChange={(v) => { setCcId(v); setEiId(""); }}
+                  options={ccOptions}
+                  placeholder="Selecione..."
+                  dark={dark}
+                />
               )}
             </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={handleSaveBill}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-violet-500/25 hover:shadow-xl transition-all border-none cursor-pointer"
-              >
-                Salvar Conta
-              </button>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={lbl}>Item de Despesa <span className={cn("font-normal", dark ? "text-slate-600" : "text-slate-400")}>(opcional)</span></label>
+                <button onClick={() => setIsNewEi(!isNewEi)} className="text-[9px] text-violet-500 font-semibold border-none bg-transparent cursor-pointer">
+                  {isNewEi ? "Selecionar" : "+ Novo Item"}
+                </button>
+              </div>
+              {isNewEi ? (
+                <input value={newEiName} onChange={(e) => setNewEiName(e.target.value)} className={inp} placeholder="Ex: Aluguel, Salários..." />
+              ) : (
+                <Select
+                  value={eiId}
+                  onValueChange={setEiId}
+                  options={eiOptions}
+                  placeholder={eiOptions.length === 0 && ccId ? "Nenhum item — crie um" : "Selecione..."}
+                  disabled={!ccId || isNewCc}
+                  dark={dark}
+                />
+              )}
             </div>
           </div>
-        </div>
-      )}
 
-      {editingBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className={cn("w-full max-w-sm rounded-2xl p-6 shadow-2xl", dark ? "bg-slate-800" : "bg-white")}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className={cn("text-sm font-bold", dark ? "text-white" : "text-slate-900")}>
-                Editar Conta
-              </h3>
-              <button onClick={() => setEditingBill(null)} className={cn("p-1 rounded-md border-none cursor-pointer", dark ? "text-slate-400 hover:bg-slate-700" : "text-slate-500 hover:bg-slate-100")}>
-                <X size={16} />
-              </button>
-            </div>
-            
-            <p className={cn("text-xs font-semibold mb-4", dark ? "text-slate-300" : "text-slate-700")}>{editingBill.description}</p>
-
-            <div className="space-y-4">
-              <div>
-                <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Valor (R$)</label>
-                <input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={inp} autoFocus />
-              </div>
-              <div>
-                <label className={cn("text-[10px] mb-1 block font-semibold", dark ? "text-slate-400" : "text-slate-500")}>Vencimento</label>
-                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className={inp} />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={saveEdit}
-                className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-bold shadow-lg border-none cursor-pointer"
-              >
-                Salvar
-              </button>
+          <div>
+            <label className={cn(lbl, "mb-2")}>Tipo de Conta</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "UNIQUE", label: "Única", icon: Receipt },
+                { id: "RECURRENT_FIXED", label: "Fixa", icon: Repeat },
+                { id: "RECURRENT_VARIABLE", label: "Variável", icon: Zap },
+                { id: "INSTALLMENT", label: "Parcelada", icon: CreditCard },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setType(t.id as typeof type)}
+                  className={cn(
+                    "flex items-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer text-[11px] font-semibold",
+                    type === t.id
+                      ? dark ? "bg-violet-900/30 border-violet-500 text-violet-400" : "bg-violet-50 border-violet-500 text-violet-700"
+                      : dark ? "bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                  )}
+                >
+                  <t.icon size={14} /> {t.label}
+                </button>
+              ))}
             </div>
           </div>
+
+          {type === "INSTALLMENT" && (
+            <div>
+              <label className={lbl}>Número de Parcelas</label>
+              <input type="number" value={installments} onChange={(e) => setInstallments(e.target.value)} className={inp} min="2" max="48" />
+              <p className={cn("text-[9px] mt-1", dark ? "text-slate-500" : "text-slate-400")}>O valor total será dividido por {installments || 2}.</p>
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={handleSaveBill}
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-bold shadow-lg shadow-violet-500/25 hover:shadow-xl transition-all border-none cursor-pointer"
+          >
+            Salvar Conta
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal Editar Conta */}
+      <Modal
+        open={!!editingBill}
+        onOpenChange={(v) => { if (!v) setEditingBill(null); }}
+        title="Editar Conta"
+        dark={dark}
+        size="sm"
+      >
+        <p className={cn("text-xs font-semibold mb-4 -mt-2", dark ? "text-slate-300" : "text-slate-700")}>{editingBill?.description}</p>
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Valor (R$)</label>
+            <input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={inp} autoFocus />
+          </div>
+          <div>
+            <label className={lbl}>Vencimento</label>
+            <DatePicker value={editDate} onChange={setEditDate} dark={dark} />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={saveEdit}
+            className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-bold shadow-lg border-none cursor-pointer"
+          >
+            Salvar
+          </button>
+        </div>
+      </Modal>
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        open={confirmState.open}
+        onOpenChange={confirmClose}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        variant={confirmState.variant}
+        onConfirm={confirmState.onConfirm}
+        dark={dark}
+      />
     </div>
   );
 };

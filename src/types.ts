@@ -1,4 +1,15 @@
-export type PaymentArray = (number | null)[];
+export type PaymentStatus = "PAID" | "PENDING" | "WAIVED";
+export type DisplayStatus = "PAID" | "PENDING" | "LATE" | "WAIVED" | "FUTURE";
+
+export interface Payment {
+  amount: number;
+  status: PaymentStatus;
+}
+
+export interface Instrument {
+  id: string;
+  name: string;
+}
 
 export interface Student {
   id: string;
@@ -6,10 +17,12 @@ export interface Student {
   situation: string;
   hour: string;
   day: string;
-  payments: PaymentArray;
+  payments: (Payment | null)[];
   enrollmentDate?: string;
   exitDate?: string;
   tuitionAmount?: number;
+  instrumentId?: string;
+  instrumentName?: string;
 }
 
 export interface Professor {
@@ -17,6 +30,7 @@ export interface Professor {
   name: string;
   instrument: string;
   costPerStudent: number;
+  instruments: Instrument[];
   students: Student[];
 }
 

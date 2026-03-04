@@ -3,6 +3,9 @@ import type {
   DashboardData,
   Professor,
   Student,
+  Payment,
+  PaymentStatus,
+  Instrument,
   CostCenter,
   ExpenseItem,
   Revenue,
@@ -12,7 +15,9 @@ import type {
 
 // ─── Row types from Supabase ───────────────────────────────────────────────
 interface DbProfessor { id: string; name: string; instrument: string; cost_per_student: number; }
-interface DbStudent { id: string; professor_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; }
+interface DbStudent { id: string; professor_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; }
+interface DbInstrument { id: string; school_id: string; name: string; }
+interface DbProfInstrument { professor_id: string; instrument_id: string; instruments: { id: string; name: string } | { id: string; name: string }[] | null; }
 interface DbPayment { id: string; student_id: string; year: number; month: number; amount: number; status: string; }
 interface DbCostCenter { id: string; name: string; color: string; sort_order: number; }
 interface DbExpenseItem { id: string; cost_center_id: string; name: string; expense_type: string; }
@@ -27,7 +32,7 @@ export type SlugMap = Record<string, string>; // slug -> id
 
 // ─── LOAD ──────────────────────────────────────────────────────────────────
 
-export async function loadSchoolData(schoolId: string): Promise<{ data: DashboardData | null; slugMap: SlugMap; error: string | null }> {
+export async function loadSchoolData(schoolId: string): Promise<{ data: DashboardData | null; slugMap: SlugMap; instruments: Instrument[]; error: string | null }> {
   const [
     schoolRes,
     professorsRes,
@@ -39,10 +44,12 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     revCatsRes,
     revenuesRes,
     billsRes,
+    instrumentsRes,
+    profInstrumentsRes,
   ] = await Promise.all([
     supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).single(),
     supabase.from("professors").select("id, name, instrument, cost_per_student").eq("school_id", schoolId).eq("active", true).order("name"),
-    supabase.from("students").select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date").eq("school_id", schoolId).order("name"),
+    supabase.from("students").select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id").eq("school_id", schoolId).order("name"),
     supabase.from("payments").select("id, student_id, year, month, amount, status").eq("school_id", schoolId),
     supabase.from("cost_centers").select("id, name, color, sort_order").eq("school_id", schoolId).order("sort_order"),
     supabase.from("expense_items").select("id, cost_center_id, name, expense_type, cost_centers!inner(school_id)").eq("cost_centers.school_id", schoolId),
@@ -50,15 +57,22 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     supabase.from("revenue_categories").select("id, name, slug, sort_order").eq("school_id", schoolId).order("sort_order"),
     supabase.from("revenues").select("id, category_id, year, month, amount").eq("school_id", schoolId),
     supabase.from("bills").select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id").eq("school_id", schoolId).order("due_date"),
+    supabase.from("instruments").select("id, name").eq("school_id", schoolId).order("name"),
+    supabase.from("professor_instruments").select("professor_id, instrument_id, instruments(id, name)"),
   ]);
 
   const err = schoolRes.error || professorsRes.error || studentsRes.error || paymentsRes.error || costCentersRes.error || expenseItemsRes.error || expensesRes.error || revCatsRes.error || revenuesRes.error || billsRes.error;
-  if (err || !schoolRes.data) return { data: null, slugMap: {}, error: err?.message || "School not found" };
+  if (err || !schoolRes.data) return { data: null, slugMap: {}, instruments: [], error: err?.message || "School not found" };
 
   const school = schoolRes.data as DbSchool;
   const professors = (professorsRes.data || []) as DbProfessor[];
-  const students = (studentsRes.data || []) as DbStudent[];
+  const students = (studentsRes.data || []) as (DbStudent)[];
   const payments = (paymentsRes.data || []) as DbPayment[];
+  const allInstruments = (instrumentsRes.data || []) as DbInstrument[];
+  const profInstruments = (profInstrumentsRes.data || []) as DbProfInstrument[];
+  const profIds = new Set(professors.map(p => p.id));
+  const filteredProfInstruments = profInstruments.filter(pi => profIds.has(pi.professor_id));
+  const instrumentMap = new Map(allInstruments.map(i => [i.id, i.name]));
   const costCenters = (costCentersRes.data || []) as DbCostCenter[];
   const expenseItems = ((expenseItemsRes.data || []) as any[]).map((ei: any) => ({ id: ei.id, cost_center_id: ei.cost_center_id, name: ei.name, expense_type: ei.expense_type } as DbExpenseItem));
   const expenses = (expensesRes.data || []) as DbExpense[];
@@ -77,33 +91,47 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     passport: Number(school.passport_fee),
   };
 
-  const builtProfessors: Professor[] = professors.map((p) => ({
-    id: p.id,
-    name: p.name,
-    instrument: p.instrument || "",
-    costPerStudent: Number(p.cost_per_student),
-    students: students
-      .filter((s) => s.professor_id === p.id)
-      .map((s) => {
-        const arr: (number | null)[] = Array(12).fill(null);
-        payments
-          .filter((pay) => pay.student_id === s.id && pay.year === year)
-          .forEach((pay) => {
-            arr[pay.month - 1] = Number(pay.amount);
-          });
+  const builtProfessors: Professor[] = professors.map((p) => {
+    const profInsts: Instrument[] = filteredProfInstruments
+      .filter(pi => pi.professor_id === p.id)
+      .map(pi => {
+        const inst = Array.isArray(pi.instruments) ? pi.instruments[0] : pi.instruments;
         return {
-          id: s.id,
-          name: s.name,
-          situation: s.situation || "Ativo",
-          hour: s.lesson_time || "",
-          day: s.lesson_day || "",
-          payments: arr,
-          enrollmentDate: s.enrollment_date || undefined,
-          exitDate: s.exit_date || undefined,
-          tuitionAmount: s.tuition_amount ? Number(s.tuition_amount) : undefined,
-        } as Student;
-      }),
-  }));
+          id: inst?.id || pi.instrument_id,
+          name: inst?.name || instrumentMap.get(pi.instrument_id) || "",
+        };
+      });
+    return {
+      id: p.id,
+      name: p.name,
+      instrument: p.instrument || "",
+      costPerStudent: Number(p.cost_per_student),
+      instruments: profInsts,
+      students: students
+        .filter((s) => s.professor_id === p.id)
+        .map((s) => {
+          const arr: (Payment | null)[] = Array(12).fill(null);
+          payments
+            .filter((pay) => pay.student_id === s.id && pay.year === year)
+            .forEach((pay) => {
+              arr[pay.month - 1] = { amount: Number(pay.amount), status: (pay.status || "PENDING") as PaymentStatus };
+            });
+          return {
+            id: s.id,
+            name: s.name,
+            situation: s.situation || "Ativo",
+            hour: s.lesson_time || "",
+            day: s.lesson_day || "",
+            payments: arr,
+            enrollmentDate: s.enrollment_date || undefined,
+            exitDate: s.exit_date || undefined,
+            tuitionAmount: s.tuition_amount ? Number(s.tuition_amount) : undefined,
+            instrumentId: s.instrument_id || undefined,
+            instrumentName: s.instrument_id ? instrumentMap.get(s.instrument_id) : undefined,
+          } as Student;
+        }),
+    };
+  });
 
   const builtExpenses: CostCenter[] = costCenters.map((cc) => ({
     id: cc.id,
@@ -153,6 +181,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
   return {
     data: { config, professors: builtProfessors, expenses: builtExpenses, revenue: builtRevenue, payableBills: builtBills },
     slugMap,
+    instruments: allInstruments.map(i => ({ id: i.id, name: i.name })),
     error: null,
   };
 }
@@ -185,8 +214,20 @@ export async function loadAvgTenure(schoolId: string) {
 
 // ─── WRITES: Professors ────────────────────────────────────────────────────
 
-export async function addProfessor(schoolId: string, data: { name: string; instrument: string; costPerStudent: number }) {
-  return supabase.from("professors").insert({ school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent }).select("id, name, instrument, cost_per_student").single();
+export async function addProfessor(schoolId: string, data: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) {
+  const res = await supabase.from("professors").insert({ school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent }).select("id, name, instrument, cost_per_student").single();
+  if (res.data && data.instrumentIds && data.instrumentIds.length > 0) {
+    const links = data.instrumentIds.map(iid => ({ professor_id: res.data.id, instrument_id: iid }));
+    await supabase.from("professor_instruments").insert(links);
+  }
+  return res;
+}
+
+export async function updateProfessor(profId: string, data: { name?: string; costPerStudent?: number }) {
+  const update: any = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.costPerStudent !== undefined) update.cost_per_student = data.costPerStudent;
+  return supabase.from("professors").update(update).eq("id", profId).select("id, name, instrument, cost_per_student").single();
 }
 
 export async function deleteProfessor(profId: string) {
@@ -195,7 +236,7 @@ export async function deleteProfessor(profId: string) {
 
 // ─── WRITES: Students ──────────────────────────────────────────────────────
 
-export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string }) {
+export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string }) {
   return supabase.from("students").insert({
     school_id: schoolId,
     professor_id: data.professorId,
@@ -205,10 +246,11 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
     lesson_time: data.time,
     tuition_amount: data.tuition || null,
     enrollment_date: data.enrollmentDate || new Date().toISOString().split("T")[0],
-  }).select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date").single();
+    instrument_id: data.instrumentId || null,
+  }).select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id").single();
 }
 
-export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number }) {
+export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
   if (data.situation !== undefined) update.situation = data.situation;
@@ -216,7 +258,8 @@ export async function updateStudent(studentId: string, data: { name?: string; si
   if (data.hour !== undefined) update.lesson_time = data.hour;
   if (data.enrollmentDate !== undefined) update.enrollment_date = data.enrollmentDate;
   if (data.tuitionAmount !== undefined) update.tuition_amount = data.tuitionAmount;
-  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date").single();
+  if (data.instrumentId !== undefined) update.instrument_id = data.instrumentId;
+  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id").single();
 }
 
 export async function deleteStudent(studentId: string) {
@@ -225,21 +268,30 @@ export async function deleteStudent(studentId: string) {
 
 // ─── WRITES: Payments ──────────────────────────────────────────────────────
 
-export async function upsertPayment(data: { studentId: string; schoolId: string; year: number; month: number; amount: number | null; status: string }) {
+export async function upsertPayment(data: { studentId: string; schoolId: string; year: number; month: number; amount: number | null; status: string; paidAt?: string | null }) {
   if (data.amount === null) {
     return supabase.from("payments").delete().eq("student_id", data.studentId).eq("year", data.year).eq("month", data.month);
   }
+  const row: any = { amount: data.amount, status: data.status };
+  if (data.paidAt !== undefined) row.paid_at = data.paidAt;
   const { data: existing } = await supabase.from("payments").select("id").eq("student_id", data.studentId).eq("year", data.year).eq("month", data.month).maybeSingle();
   if (existing) {
-    return supabase.from("payments").update({ amount: data.amount, status: data.status }).eq("id", existing.id);
+    return supabase.from("payments").update(row).eq("id", existing.id);
   }
-  return supabase.from("payments").insert({ student_id: data.studentId, school_id: data.schoolId, year: data.year, month: data.month, amount: data.amount, status: data.status });
+  return supabase.from("payments").insert({ student_id: data.studentId, school_id: data.schoolId, year: data.year, month: data.month, ...row });
 }
 
 // ─── WRITES: Cost Centers ──────────────────────────────────────────────────
 
 export async function addCostCenter(schoolId: string, data: { name: string; color: string }) {
   return supabase.from("cost_centers").insert({ school_id: schoolId, name: data.name, color: data.color }).select("id, name, color, sort_order").single();
+}
+
+export async function updateCostCenter(ccId: string, data: { name?: string; color?: string }) {
+  const update: any = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.color !== undefined) update.color = data.color;
+  return supabase.from("cost_centers").update(update).eq("id", ccId).select("id, name, color, sort_order").single();
 }
 
 export async function deleteCostCenter(ccId: string) {
@@ -251,6 +303,13 @@ export async function deleteCostCenter(ccId: string) {
 
 export async function addExpenseItem(costCenterId: string, data: { name: string; expenseType: "F" | "V" }) {
   return supabase.from("expense_items").insert({ cost_center_id: costCenterId, name: data.name, expense_type: data.expenseType }).select("id, cost_center_id, name, expense_type").single();
+}
+
+export async function updateExpenseItem(eiId: string, data: { name?: string; expenseType?: "F" | "V" }) {
+  const update: any = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.expenseType !== undefined) update.expense_type = data.expenseType;
+  return supabase.from("expense_items").update(update).eq("id", eiId).select("id, cost_center_id, name, expense_type").single();
 }
 
 export async function deleteExpenseItem(eiId: string) {
@@ -312,6 +371,24 @@ export async function updateBill(billId: string, data: { amount?: number; dueDat
 
 export async function deleteBills(billIds: string[]) {
   return supabase.from("bills").delete().in("id", billIds);
+}
+
+// ─── WRITES: Instruments ────────────────────────────────────────────────────
+
+export async function addInstrument(schoolId: string, name: string) {
+  return supabase.from("instruments").insert({ school_id: schoolId, name }).select("id, name").single();
+}
+
+export async function deleteInstrument(instrumentId: string) {
+  return supabase.from("instruments").delete().eq("id", instrumentId);
+}
+
+export async function addProfessorInstrument(profId: string, instrumentId: string) {
+  return supabase.from("professor_instruments").insert({ professor_id: profId, instrument_id: instrumentId });
+}
+
+export async function removeProfessorInstrument(profId: string, instrumentId: string) {
+  return supabase.from("professor_instruments").delete().eq("professor_id", profId).eq("instrument_id", instrumentId);
 }
 
 // ─── WRITES: Config (school) ───────────────────────────────────────────────

@@ -199,6 +199,8 @@ export const Dashboard = () => {
                 <YAxis stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
+                  itemStyle={{ color: "var(--color-text-primary)" }}
+                  labelStyle={{ color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: "4px" }}
                   formatter={(value: number) => brl(value)}
                 />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />
@@ -226,6 +228,8 @@ export const Dashboard = () => {
                 </Pie>
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
+                  itemStyle={{ color: "var(--color-text-primary)" }}
+                  labelStyle={{ color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: "4px" }}
                   formatter={(value: number) => brl(value)}
                 />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />
@@ -247,10 +251,13 @@ export const Dashboard = () => {
                 <XAxis dataKey="month" stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => pct(v)} />
                 <Tooltip
+                  cursor={{ fill: "var(--color-surface-tertiary)", opacity: 0.4 }}
                   contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
+                  itemStyle={{ color: "var(--color-text-primary)" }}
+                  labelStyle={{ color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: "4px" }}
                   formatter={(value: number) => pct(value)}
                 />
-                <Bar dataKey="margin" radius={[4, 4, 4, 4]}>
+                <Bar dataKey="margin" name="Margem" radius={[4, 4, 4, 4]}>
                   {md.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
@@ -276,7 +283,10 @@ export const Dashboard = () => {
                 <XAxis dataKey="month" stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="var(--color-text-tertiary)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
+                  cursor={{ fill: "var(--color-surface-tertiary)", opacity: 0.4 }}
                   contentStyle={{ backgroundColor: "var(--color-surface-tertiary)", borderColor: "var(--color-border-primary)", borderRadius: "8px", fontSize: "11px", color: "var(--color-text-primary)" }}
+                  itemStyle={{ color: "var(--color-text-primary)" }}
+                  labelStyle={{ color: "var(--color-text-secondary)", fontWeight: 500, marginBottom: "4px" }}
                   formatter={(value: number) => brl(value)}
                 />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />

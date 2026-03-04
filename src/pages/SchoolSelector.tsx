@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth, School } from "../context/AuthContext";
-import { Music, Plus, School as SchoolIcon } from "lucide-react";
+import { Plus, School as SchoolIcon } from "lucide-react";
 
 interface Props {
   onCreateNew: () => void;
@@ -16,11 +16,11 @@ export const SchoolSelector: React.FC<Props> = ({ onCreateNew }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-primary px-4">
       <div className="w-full max-w-lg">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-surface-tertiary mb-4 border border-border-primary">
-            <Music className="w-8 h-8 text-text-primary" />
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
+            <img src="/Avatar_Porquinho.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary font-sans uppercase">Selecione a escola</h1>
+          <h1 className="text-2xl font-extrabold tracking-tighter text-text-primary font-logo">Selecione a escola</h1>
           <p className="text-text-secondary mt-1 text-sm">Escolha qual escola deseja gerenciar</p>
         </div>
 

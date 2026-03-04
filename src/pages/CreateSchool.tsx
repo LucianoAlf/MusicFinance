@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { Loader2, Music } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface Props {
   onBack?: () => void;
@@ -39,12 +39,12 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-primary px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-surface-tertiary mb-4 border border-border-primary">
-            <Music className="w-8 h-8 text-text-primary" />
+      <div className="w-full max-md">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
+            <img src="/Avatar_Porquinho.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary font-sans uppercase">
+          <h1 className="text-2xl font-extrabold tracking-tighter text-text-primary font-logo">
             {isFirstSchool ? "Crie sua primeira escola" : "Nova escola"}
           </h1>
           <p className="text-text-secondary mt-1 text-sm">

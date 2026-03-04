@@ -117,14 +117,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const init = async () => {
-      const { data: { session: s } } = await supabase.auth.getSession();
-      setSession(s);
-      setUser(s?.user ?? null);
+      try {
+        const { data: { session: s } } = await supabase.auth.getSession();
+        setSession(s);
+        setUser(s?.user ?? null);
 
-      if (s?.user) {
-        await initUser(s.user);
+        if (s?.user) {
+          await initUser(s.user);
+        }
+      } catch (e) {
+        console.error("Auth init error:", e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
 

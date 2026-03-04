@@ -128,6 +128,7 @@ export const Professors = () => {
   const [nsEnroll, setNsEnroll] = useState(new Date().toISOString().split("T")[0]);
   const [nsInstId, setNsInstId] = useState("");
   const [nsDueDay, setNsDueDay] = useState("5");
+  const [nsPayMethod, setNsPayMethod] = useState("");
   const [nsSubmitting, setNsSubmitting] = useState(false);
   const [nsExisting, setNsExisting] = useState(false);
   const [nsPersonId, setNsPersonId] = useState("");
@@ -141,6 +142,7 @@ export const Professors = () => {
   const [esTuition, setEsTuition] = useState("");
   const [esInstId, setEsInstId] = useState("");
   const [esDueDay, setEsDueDay] = useState("5");
+  const [esPayMethod, setEsPayMethod] = useState("");
   const [esPhone, setEsPhone] = useState("");
   const [esRespName, setEsRespName] = useState("");
   const [esRespPhone, setEsRespPhone] = useState("");
@@ -263,10 +265,11 @@ export const Professors = () => {
       instrumentId: nsInstId || undefined,
       personId: nsExisting && nsPersonId ? nsPersonId : undefined,
       dueDay: Number(nsDueDay) || 5,
+      paymentMethod: nsPayMethod || undefined,
     });
     setShowAddStud(null);
     setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
-    setNsExisting(false); setNsPersonId(""); setNsDueDay("5");
+    setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
     setNsSubmitting(false);
   };
 
@@ -280,6 +283,7 @@ export const Professors = () => {
     setEsTuition(s.tuitionAmount?.toString() || data.config.tuition.toString());
     setEsInstId(s.instrumentId || "");
     setEsDueDay(s.dueDay?.toString() || "5");
+    setEsPayMethod(s.paymentMethod || "");
     setEsPhone(s.phone || "");
     setEsRespName(s.responsibleName || "");
     setEsRespPhone(s.responsiblePhone || "");
@@ -299,6 +303,7 @@ export const Professors = () => {
       responsibleName: esRespName,
       responsiblePhone: esRespPhone,
       dueDay: Number(esDueDay) || 5,
+      paymentMethod: esPayMethod || undefined,
     });
     setEditStudent(null);
   };
@@ -604,6 +609,7 @@ export const Professors = () => {
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-12 text-center border-b border-border-primary font-medium">Hora</th>
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-10 text-center border-b border-border-primary font-medium">Dia</th>
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-24 border-b border-border-primary font-medium">Situação</th>
+                      <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-20 text-center border-b border-border-primary font-medium">Forma</th>
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 w-10 text-center border-b border-border-primary font-medium">Pgto</th>
                       <th className="pb-2 w-8 border-b border-border-primary"></th>
                     </tr>
@@ -640,6 +646,9 @@ export const Professors = () => {
                                 options={situationOptions}
                                 compact
                               />
+                            </td>
+                            <td className="py-2.5 px-1 text-center text-[10px] text-text-secondary whitespace-nowrap">
+                              {s.paymentMethod || "—"}
                             </td>
                             <td className="py-2.5 text-center">
                               <button onClick={() => setSelPay(selPay === s.id ? null : s.id)}
@@ -867,6 +876,22 @@ export const Professors = () => {
             </div>
           </div>
           <div>
+            <label className={lbl}>Forma de Pagamento</label>
+            <Select
+              value={nsPayMethod}
+              onValueChange={setNsPayMethod}
+              options={[
+                { value: "Boleto", label: "Boleto" },
+                { value: "Dinheiro", label: "Dinheiro" },
+                { value: "Pix", label: "Pix" },
+                { value: "Crédito Recorrente", label: "Crédito Recorrente" },
+                { value: "Cartão de Débito", label: "Cartão de Débito" },
+                { value: "Cartão de Crédito", label: "Cartão de Crédito" }
+              ]}
+              placeholder="Selecionar forma de pagamento..."
+            />
+          </div>
+          <div>
             <label className={lbl}>Data de Matrícula</label>
             <DatePicker value={nsEnroll} onChange={setNsEnroll} />
           </div>
@@ -938,6 +963,22 @@ export const Professors = () => {
               />
             </div>
           </div>
+          <div>
+            <label className={lbl}>Forma de Pagamento</label>
+            <Select
+              value={esPayMethod}
+              onValueChange={setEsPayMethod}
+              options={[
+                { value: "Boleto", label: "Boleto" },
+                { value: "Dinheiro", label: "Dinheiro" },
+                { value: "Pix", label: "Pix" },
+                { value: "Crédito Recorrente", label: "Crédito Recorrente" },
+                { value: "Cartão de Débito", label: "Cartão de Débito" },
+                { value: "Cartão de Crédito", label: "Cartão de Crédito" }
+              ]}
+              placeholder="Selecionar forma de pagamento..."
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Data de Matrícula</label>
@@ -948,7 +989,7 @@ export const Professors = () => {
               <DatePicker value={editStudent?.exitDate || ""} onChange={() => {}} readOnly disabled={esSit === "Ativo"} />
             </div>
           </div>
-          <div className="border-t border-border-primary pt-4">
+          {/* <div className="border-t border-border-primary pt-4">
             <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-3">Contato</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -964,7 +1005,7 @@ export const Professors = () => {
               <label className={lbl}>Telefone do Responsável</label>
               <input value={esRespPhone} onChange={(e) => setEsRespPhone(e.target.value)} className={inp} placeholder="(11) 99999-0000" />
             </div>
-          </div>
+          </div> */}
           <div className="rounded-lg p-3 border border-border-secondary bg-surface-tertiary">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Tempo de Permanência</span>

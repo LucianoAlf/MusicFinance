@@ -15,7 +15,7 @@ import type {
 
 // ─── Row types from Supabase ───────────────────────────────────────────────
 interface DbProfessor { id: string; name: string; instrument: string; cost_per_student: number; avatar_url: string | null; }
-interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; phone: string | null; responsible_name: string | null; responsible_phone: string | null; due_day: number | null; }
+interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; phone: string | null; responsible_name: string | null; responsible_phone: string | null; due_day: number | null; payment_method: string | null; }
 interface DbInstrument { id: string; school_id: string; name: string; }
 interface DbProfInstrument { professor_id: string; instrument_id: string; instruments: { id: string; name: string } | { id: string; name: string }[] | null; }
 interface DbPayment { id: string; student_id: string; year: number; month: number; amount: number; status: string; }
@@ -49,7 +49,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
   ] = await Promise.all([
     supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).single(),
     supabase.from("professors").select("id, name, instrument, cost_per_student, avatar_url").eq("school_id", schoolId).eq("active", true).order("name"),
-    supabase.from("students").select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day").eq("school_id", schoolId).order("name"),
+    supabase.from("students").select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").eq("school_id", schoolId).order("name"),
     supabase.from("payments").select("id, student_id, year, month, amount, status").eq("school_id", schoolId),
     supabase.from("cost_centers").select("id, name, color, sort_order").eq("school_id", schoolId).order("sort_order"),
     supabase.from("expense_items").select("id, cost_center_id, name, expense_type, cost_centers!inner(school_id)").eq("cost_centers.school_id", schoolId),
@@ -134,6 +134,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
             responsibleName: s.responsible_name || undefined,
             responsiblePhone: s.responsible_phone || undefined,
             dueDay: s.due_day ?? 5,
+            paymentMethod: s.payment_method || undefined,
           } as Student;
         }),
     };
@@ -282,7 +283,7 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
   return supabase.from("students").insert(row).select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id, due_day").single();
 }
 
-export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number }) {
+export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
   if (data.situation !== undefined) update.situation = data.situation;
@@ -295,7 +296,8 @@ export async function updateStudent(studentId: string, data: { name?: string; si
   if (data.responsibleName !== undefined) update.responsible_name = data.responsibleName;
   if (data.responsiblePhone !== undefined) update.responsible_phone = data.responsiblePhone;
   if (data.dueDay !== undefined) update.due_day = data.dueDay;
-  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day").single();
+  if (data.paymentMethod !== undefined) update.payment_method = data.paymentMethod;
+  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").single();
 }
 
 export async function deleteStudent(studentId: string) {
@@ -414,13 +416,29 @@ export async function createBills(schoolId: string, bills: Array<{
   return supabase.from("bills").insert(rows).select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id, competence_month, competence_year");
 }
 
-export async function updateBill(billId: string, data: { amount?: number; dueDate?: string; status?: string; paidAmount?: number; paidAt?: string }) {
+export async function updateBill(billId: string, data: {
+  amount?: number;
+  dueDate?: string;
+  status?: string;
+  paidAmount?: number;
+  paidAt?: string;
+  description?: string;
+  expenseItemId?: string;
+  billType?: string;
+  competenceMonth?: number;
+  competenceYear?: number;
+}) {
   const update: any = {};
   if (data.amount !== undefined) update.amount = data.amount;
   if (data.dueDate !== undefined) update.due_date = data.dueDate;
   if (data.status !== undefined) update.status = data.status;
   if (data.paidAmount !== undefined) update.paid_amount = data.paidAmount;
   if (data.paidAt !== undefined) update.paid_at = data.paidAt;
+  if (data.description !== undefined) update.description = data.description;
+  if (data.expenseItemId !== undefined) update.expense_item_id = data.expenseItemId;
+  if (data.billType !== undefined) update.bill_type = data.billType;
+  if (data.competenceMonth !== undefined) update.competence_month = data.competenceMonth;
+  if (data.competenceYear !== undefined) update.competence_year = data.competenceYear;
   return supabase.from("bills").update(update).eq("id", billId);
 }
 

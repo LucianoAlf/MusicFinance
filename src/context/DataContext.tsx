@@ -61,8 +61,8 @@ interface DataContextType {
   handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<void>;
   handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number }) => Promise<void>;
-  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
+  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument | null>;
   handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
@@ -259,12 +259,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number }) => {
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const tuitionVal = d.tuition || data.config.tuition;
     const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
-    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId });
+    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, paymentMethod: d.paymentMethod });
     if (error || !row) { markError(); return; }
 
     const payments12: (Payment | null)[] = [];
@@ -276,12 +276,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     for (const pi of paymentInserts) await apiUpsertPayment(pi);
 
     const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
-    const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5 };
+    const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
     setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
     markSaved();
   };
 
-  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number }) => {
+  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateStudent(studentId, updates);
@@ -307,6 +307,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             responsibleName: row.responsible_name || undefined,
             responsiblePhone: row.responsible_phone || undefined,
             dueDay: row.due_day ?? s.dueDay,
+            paymentMethod: row.payment_method || undefined,
           } : s),
         })),
       };
@@ -573,6 +574,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.amount !== undefined) apiUpdates.amount = updates.amount;
     if (updates.dueDate !== undefined) apiUpdates.dueDate = updates.dueDate;
     if (updates.status !== undefined) apiUpdates.status = updates.status;
+    if (updates.description !== undefined) apiUpdates.description = updates.description;
+    if (updates.expenseItemId !== undefined) apiUpdates.expenseItemId = updates.expenseItemId;
+    if (updates.type !== undefined) apiUpdates.billType = updates.type;
+    if (updates.competenceMonth !== undefined) apiUpdates.competenceMonth = updates.competenceMonth;
+    if (updates.competenceYear !== undefined) apiUpdates.competenceYear = updates.competenceYear;
     const { error } = await apiUpdateBill(billId, apiUpdates);
     if (error) { markError(); return; }
 

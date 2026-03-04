@@ -40,8 +40,14 @@ export const Payables = () => {
   const [newEiName, setNewEiName] = useState("");
 
   const [editingBill, setEditingBill] = useState<PayableBill | null>(null);
+  const [editDesc, setEditDesc] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [editType, setEditType] = useState<"UNIQUE" | "RECURRENT" | "INSTALLMENT">("UNIQUE");
+  const [editCcId, setEditCcId] = useState("");
+  const [editEiId, setEditEiId] = useState("");
+  const [editStatus, setEditStatus] = useState<"PENDING" | "PAID">("PENDING");
+  const [editCompMo, setEditCompMo] = useState("");
 
   const { state: confirmState, confirm, close: confirmClose } = useConfirm();
 
@@ -52,6 +58,9 @@ export const Payables = () => {
   const lbl = "text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider";
 
   const curMonthBills = data.payableBills.filter((b) => {
+    if (b.competenceMonth !== undefined && b.competenceYear !== undefined) {
+      return b.competenceMonth === curMo && b.competenceYear === data.config.year;
+    }
     const d = new Date(b.dueDate + "T12:00:00");
     return d.getMonth() === curMo && d.getFullYear() === data.config.year;
   });
@@ -63,6 +72,9 @@ export const Payables = () => {
   const ccOptions = data.expenses.map((cc) => ({ value: cc.id, label: cc.name }));
   const eiOptions = ccId
     ? (data.expenses.find((c) => c.id === ccId)?.items.map((ei) => ({ value: ei.id, label: ei.name })) || [])
+    : [];
+  const editEiOptions = editCcId
+    ? (data.expenses.find((c) => c.id === editCcId)?.items.map((ei) => ({ value: ei.id, label: ei.name })) || [])
     : [];
 
   const monthOptions = MF.map((m, i) => ({ value: String(i), label: m }));
@@ -221,23 +233,36 @@ export const Payables = () => {
   };
 
   const saveEdit = async () => {
-    if (!editingBill || !editAmount || !editDate) return;
+    if (!editingBill || !editDesc.trim() || !editAmount || !editDate) return;
     const newAmt = Number(editAmount);
     const oldMonth = new Date(editingBill.dueDate + "T12:00:00").getMonth();
-    const newMonth = new Date(editDate + "T12:00:00").getMonth();
+    const newMonth = Number(editCompMo);
 
     const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
-    if (editingBill.costCenterId && editingBill.expenseItemId) {
-      if (oldMonth === newMonth) {
-        const diff = newAmt - editingBill.amount;
-        if (diff !== 0) expenseUpdates.push({ ccId: editingBill.costCenterId, eiId: editingBill.expenseItemId, month: oldMonth, delta: diff });
-      } else {
-        expenseUpdates.push({ ccId: editingBill.costCenterId, eiId: editingBill.expenseItemId, month: oldMonth, delta: -editingBill.amount });
-        expenseUpdates.push({ ccId: editingBill.costCenterId, eiId: editingBill.expenseItemId, month: newMonth, delta: newAmt });
-      }
+    
+    const oldEiId = editingBill.expenseItemId;
+    const newEiId = editEiId || undefined;
+    const oldCcId = editingBill.costCenterId;
+    const newCcId = editCcId || undefined;
+    
+    if (oldEiId && oldCcId) {
+      expenseUpdates.push({ ccId: oldCcId, eiId: oldEiId, month: oldMonth, delta: -editingBill.amount });
+    }
+    if (newEiId && newCcId) {
+      expenseUpdates.push({ ccId: newCcId, eiId: newEiId, month: newMonth, delta: newAmt });
     }
 
-    await handleUpdateBill(editingBill.id, { amount: newAmt, dueDate: editDate }, expenseUpdates);
+    await handleUpdateBill(editingBill.id, {
+      description: editDesc.trim(),
+      amount: newAmt,
+      dueDate: editDate,
+      type: editType,
+      expenseItemId: newEiId,
+      costCenterId: newCcId,
+      status: editStatus,
+      competenceMonth: newMonth,
+      competenceYear: data.config.year,
+    }, expenseUpdates);
     setEditingBill(null);
   };
 
@@ -362,7 +387,17 @@ export const Payables = () => {
                   <div className="flex items-center gap-4">
                     <div
                       className="cursor-pointer hover:opacity-80 transition-all text-right"
-                      onClick={() => { setEditingBill(bill); setEditAmount(bill.amount.toString()); setEditDate(bill.dueDate); }}
+                      onClick={() => {
+                        setEditingBill(bill);
+                        setEditDesc(bill.description);
+                        setEditAmount(bill.amount.toString());
+                        setEditDate(bill.dueDate);
+                        setEditType(bill.type as "UNIQUE" | "RECURRENT" | "INSTALLMENT");
+                        setEditCcId(bill.costCenterId || "");
+                        setEditEiId(bill.expenseItemId || "");
+                        setEditStatus(bill.status as "PENDING" | "PAID");
+                        setEditCompMo(bill.competenceMonth !== undefined ? String(bill.competenceMonth) : String(new Date(bill.dueDate + "T12:00:00").getMonth()));
+                      }}
                     >
                       <p className={cn("text-sm font-mono font-bold", isPaid ? "text-accent-green" : "text-text-primary")}>
                         {brl(bill.amount)}
@@ -560,25 +595,142 @@ export const Payables = () => {
         open={!!editingBill}
         onOpenChange={(v) => { if (!v) setEditingBill(null); }}
         title="Editar Conta"
-        size="sm"
+        size="md"
       >
-        <p className="text-xs font-semibold mb-4 -mt-2 text-text-secondary">{editingBill?.description}</p>
         <div className="space-y-4">
+          {/* Descrição */}
           <div>
-            <label className={lbl}>Valor (R$)</label>
-            <input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className={inp} autoFocus />
+            <label className={lbl}>Descrição</label>
+            <input
+              type="text"
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
+              className={inp}
+              placeholder="Ex: Conta de Luz"
+              autoFocus
+            />
           </div>
+
+          {/* Tipo de Lançamento */}
           <div>
-            <label className={lbl}>Vencimento</label>
-            <DatePicker value={editDate} onChange={setEditDate} />
+            <label className={lbl}>Tipo de Lançamento</label>
+            <div className="flex gap-2">
+              {[
+                { value: "UNIQUE", label: "Única", icon: Receipt },
+                { value: "RECURRENT", label: "Recorrente", icon: Repeat },
+                { value: "INSTALLMENT", label: "Parcelada", icon: CreditCard },
+              ].map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => setEditType(value as typeof editType)}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer",
+                    editType === value
+                      ? "bg-primary-btn-bg text-primary-btn-text border-primary-btn-bg"
+                      : "bg-surface-tertiary text-text-secondary border-border-secondary hover:border-border-hover"
+                  )}
+                >
+                  <Icon size={14} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Valor e Vencimento */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor (R$)</label>
+              <input
+                type="number"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                className={inp}
+                placeholder="0,00"
+              />
+            </div>
+            <div>
+              <label className={lbl}>Vencimento</label>
+              <DatePicker value={editDate} onChange={setEditDate} />
+            </div>
+          </div>
+
+          {/* Mês de Competência */}
+          <div>
+            <label className={lbl}>Mês de Competência</label>
+            <Select
+              value={editCompMo}
+              onValueChange={setEditCompMo}
+              options={monthOptions}
+              placeholder="Selecione..."
+            />
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className={lbl}>Status do Pagamento</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditStatus("PENDING")}
+                className={cn(
+                  "flex-1 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer",
+                  editStatus === "PENDING"
+                    ? "bg-amber-500/20 text-amber-400 border-amber-500/50"
+                    : "bg-surface-tertiary text-text-secondary border-border-secondary hover:border-border-hover"
+                )}
+              >
+                PENDENTE
+              </button>
+              <button
+                onClick={() => setEditStatus("PAID")}
+                className={cn(
+                  "flex-1 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer",
+                  editStatus === "PAID"
+                    ? "bg-accent-green/20 text-accent-green border-accent-green/50"
+                    : "bg-surface-tertiary text-text-secondary border-border-secondary hover:border-border-hover"
+                )}
+              >
+                JÁ PAGO
+              </button>
+            </div>
+          </div>
+
+          {/* Centro de Custo */}
+          <div>
+            <label className={lbl}>Centro de Custo</label>
+            <Select
+              value={editCcId}
+              onValueChange={(v) => { setEditCcId(v); setEditEiId(""); }}
+              options={ccOptions}
+              placeholder="Selecione..."
+            />
+          </div>
+
+          {/* Item de Despesa */}
+          <div>
+            <label className={lbl}>Item de Despesa</label>
+            <Select
+              value={editEiId}
+              onValueChange={setEditEiId}
+              options={editEiOptions}
+              placeholder="Selecione..."
+              disabled={!editCcId}
+            />
           </div>
         </div>
+
         <div className="flex gap-2 mt-6">
           <button
-            onClick={saveEdit}
-            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+            onClick={() => setEditingBill(null)}
+            className="px-4 py-2.5 rounded-lg text-xs font-semibold border border-border-secondary text-text-secondary hover:bg-surface-tertiary transition-colors cursor-pointer bg-transparent"
           >
-            Salvar
+            Cancelar
+          </button>
+          <button
+            onClick={saveEdit}
+            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
+          >
+            Salvar Alterações
           </button>
         </div>
       </Modal>

@@ -28,6 +28,7 @@ export interface Student {
   responsibleName?: string;
   responsiblePhone?: string;
   dueDay?: number;
+  paymentMethod?: string;
 }
 
 export interface Professor {

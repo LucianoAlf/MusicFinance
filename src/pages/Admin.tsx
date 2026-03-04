@@ -113,14 +113,6 @@ export const Admin: React.FC = () => {
           <h1 className="text-2xl font-bold tracking-tight text-text-primary">Painel Admin</h1>
           <p className="text-xs mt-1 text-text-secondary">Controle de Acesso</p>
         </div>
-        <button
-          onClick={loadAll}
-          disabled={loadingData}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border-secondary text-xs font-medium text-text-secondary hover:bg-surface-tertiary transition-colors cursor-pointer bg-transparent"
-        >
-          <RefreshCw size={14} className={cn(loadingData && "animate-spin")} />
-          Atualizar
-        </button>
       </div>
 
       {/* Invite Form */}

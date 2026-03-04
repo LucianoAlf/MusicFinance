@@ -1,10 +1,18 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { Loader2 } from "lucide-react";
+import { Loader2, LayoutDashboard, Users, DollarSign, Receipt, TrendingUp } from "lucide-react";
 
 interface Props {
   onGoToSignup: () => void;
 }
+
+const FEATURES = [
+  { icon: LayoutDashboard, title: "Dashboard com KPIs", desc: "Receita, ticket medio, ponto de equilibrio e churn em tempo real" },
+  { icon: Users, title: "Professores & Alunos", desc: "Gestao completa de matriculas, pagamentos e inadimplencia" },
+  { icon: DollarSign, title: "Controle Financeiro", desc: "Receitas dinamicas, despesas por centro de custo e fluxo mensal" },
+  { icon: Receipt, title: "Contas a Pagar", desc: "Lancamentos com parcelas, categorias e itens de despesa" },
+  { icon: TrendingUp, title: "DRE Automatico", desc: "Demonstrativo de resultado com margem de contribuicao e EBITDA" },
+];
 
 export const Login: React.FC<Props> = ({ onGoToSignup }) => {
   const { signIn } = useAuth();
@@ -23,66 +31,125 @@ export const Login: React.FC<Props> = ({ onGoToSignup }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-primary px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8 flex flex-col items-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
-            <img src="/porquinho.png" alt="Logo" className="w-full h-full object-contain" />
+    <div className="min-h-screen flex">
+      {/* Hero Panel (Left) */}
+      <div className="hidden lg:flex lg:w-[60%] relative overflow-hidden bg-[#0a0e14]">
+        <img
+          src="/gabi.png"
+          alt="MusicFinance"
+          className="absolute inset-0 w-full h-full object-cover opacity-40"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e14] via-[#0a0e14]/70 to-transparent" />
+
+        <div className="relative z-10 flex flex-col justify-end p-12 pb-16 h-full">
+          <div className="mt-auto max-w-lg">
+            <div className="flex items-center gap-3.5 mb-8">
+              <img src="/porquinho.png" alt="Logo" className="w-12 h-12 drop-shadow-md" />
+              <span className="font-logo text-[28px] font-extrabold tracking-tighter text-white pt-1">MusicFinance</span>
+            </div>
+
+            <h1 className="text-4xl font-bold leading-tight text-white mb-4">
+              Gestão financeira{" "}
+              <span className="text-accent-green">inteligente</span> para{" "}
+              escolas de música
+            </h1>
+
+            <p className="text-[15px] text-white/60 leading-relaxed mb-10">
+              Dashboard completo com KPIs em tempo real, controle de inadimplência, DRE automático e visão unificada de alunos, professores e receita. Feito por quem entende o mercado de educação musical.
+            </p>
+
+            <div className="space-y-3">
+              {FEATURES.map((f, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10">
+                  <div className="w-8 h-8 rounded-lg bg-accent-green/15 flex items-center justify-center flex-shrink-0">
+                    <f.icon size={16} className="text-accent-green" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-white">{f.title}</p>
+                    <p className="text-[11px] text-white/50">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-10 text-[11px] text-white/30">
+              &copy; {new Date().getFullYear()} LA Music School. Todos os direitos reservados.
+            </p>
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tighter text-text-primary font-logo">MusicFinance</h1>
-          <p className="text-text-secondary mt-1 text-sm">Dashboard Financeiro para Escolas de Musica</p>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="bg-surface-secondary rounded-xl p-8 border border-border-primary">
-          <h2 className="text-lg font-semibold text-text-primary mb-6">Entrar na sua conta</h2>
-
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-accent-red/10 border border-accent-red/20 text-accent-red text-sm">
-              {error}
+      {/* Form Panel (Right) */}
+      <div className="flex-1 flex items-center justify-center bg-surface-primary px-6">
+        <div className="w-full max-w-md">
+          {/* Mobile logo */}
+          <div className="lg:hidden text-center mb-8 flex flex-col items-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
+              <img src="/porquinho.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 rounded-lg bg-surface-tertiary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-border-hover transition-all"
-                placeholder="seu@email.com"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Senha</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 rounded-lg bg-surface-tertiary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-border-hover transition-all"
-                placeholder="Sua senha"
-              />
-            </div>
+            <h1 className="text-2xl font-extrabold tracking-tighter text-text-primary font-logo">MusicFinance</h1>
+            <p className="text-text-secondary mt-1 text-sm">Dashboard Financeiro para Escolas de Musica</p>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-6 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer border-none"
-          >
-            {loading && <Loader2 size={16} className="animate-spin" />}
-            Entrar
-          </button>
+          <div className="mb-8 hidden lg:block">
+            <h2 className="text-2xl font-bold text-text-primary tracking-tight">Bem-vindo de volta</h2>
+            <p className="text-text-secondary mt-1 text-sm">Acesse sua conta para continuar</p>
+          </div>
 
-          <p className="mt-6 text-center text-sm text-text-secondary">
-            Nao tem conta?{" "}
-            <button type="button" onClick={onGoToSignup} className="text-accent-blue hover:text-accent-blue/80 font-medium cursor-pointer bg-transparent border-none">
-              Cadastre-se
+          <form onSubmit={handleSubmit}>
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-accent-red/10 border border-accent-red/20 text-accent-red text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-surface-secondary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-green/30 focus:border-accent-green/50 transition-all text-sm"
+                  placeholder="luciano@lamusic.com"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Senha</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-surface-secondary border border-border-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-green/30 focus:border-accent-green/50 transition-all text-sm"
+                  placeholder="Sua senha"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-6 py-3 rounded-xl bg-accent-green text-[#0a0e14] font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer border-none"
+            >
+              {loading && <Loader2 size={16} className="animate-spin" />}
+              Entrar no Sistema
             </button>
-          </p>
-        </form>
+
+            <p className="mt-4 text-[11px] text-text-tertiary text-center">
+              AES 256-bit SSL
+            </p>
+
+            <p className="mt-6 text-center text-sm text-text-secondary">
+              Apenas membros autorizados da equipe LA Music{" "}
+              podem acessar este sistema.{" "}
+              <button type="button" onClick={onGoToSignup} className="text-accent-green hover:text-accent-green/80 font-semibold cursor-pointer bg-transparent border-none">
+                Cadastre-se
+              </button>
+            </p>
+          </form>
+        </div>
       </div>
     </div>
   );

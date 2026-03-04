@@ -66,14 +66,7 @@ export const DelinquencyPanel: React.FC<Props> = ({ professors, currentMonth, ye
     setTimeout(() => setCopied(null), 2000);
   };
 
-  if (totalDelinquent === 0) {
-    return (
-      <div className="rounded-xl p-6 border border-border-primary bg-surface-secondary text-center">
-        <p className="text-sm font-medium text-accent-green">Nenhum aluno inadimplente</p>
-        <p className="text-[11px] text-text-tertiary mt-1">Todos os pagamentos até {MF[currentMonth]} estão em dia.</p>
-      </div>
-    );
-  }
+  if (totalDelinquent === 0) return null;
 
   return (
     <div className="rounded-xl border border-border-primary bg-surface-secondary overflow-hidden">

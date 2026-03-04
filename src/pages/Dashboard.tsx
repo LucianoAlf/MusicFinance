@@ -44,7 +44,6 @@ export const Dashboard = () => {
   const md = Array.from({ length: 12 }, (_, i) => calcMo(i));
   const tR = md.reduce((a, d) => a + d.revenue, 0);
   const tE = md.reduce((a, d) => a + d.expenses, 0);
-  const tExpected = md.reduce((a, d) => a + d.expectedRevenue, 0);
   const tProfit = tR - tE;
   const tMargin = tR > 0 ? tProfit / tR : 0;
 
@@ -147,10 +146,14 @@ export const Dashboard = () => {
       </div>
 
       {/* Inadimplência + Rentabilidade por Curso */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DelinquencyPanel professors={data.professors} currentMonth={curMo} year={data.config.year} />
+      {delinquentCount > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <DelinquencyPanel professors={data.professors} currentMonth={curMo} year={data.config.year} />
+          <CourseBreakdown professors={data.professors} currentMonth={curMo} />
+        </div>
+      ) : (
         <CourseBreakdown professors={data.professors} currentMonth={curMo} />
-      </div>
+      )}
 
       {/* Seção ACUMULADO ANUAL — Card compacto */}
       <div className="rounded-xl p-4 border border-border-primary bg-surface-tertiary">
@@ -160,11 +163,7 @@ export const Dashboard = () => {
             Acumulado Anual
           </p>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div>
-            <p className="text-xs text-text-secondary mb-1">Previsto</p>
-            <p className="text-lg font-mono font-medium text-text-secondary">{brl(tExpected)}</p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <p className="text-xs text-text-secondary mb-1">Receita</p>
             <p className="text-lg font-mono font-medium text-accent-green">{brl(tR)}</p>

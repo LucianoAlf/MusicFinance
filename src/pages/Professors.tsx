@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
 import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
 import { Select, DatePicker, Modal, ConfirmModal, useConfirm } from "../components/ui";
+import { AvatarUploader } from "../components/ui/AvatarUploader";
+import { uploadProfessorAvatar, deleteProfessorAvatar } from "../lib/supabaseData";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
 import type { Student, Instrument, Payment, DisplayStatus } from "../types";
 import {
@@ -53,7 +56,43 @@ function calcPermanencia(enrollmentDate: string | undefined): string {
 
 const DAY_OPTIONS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map((d) => ({ value: d, label: d }));
 
+const AVATARS_F = ["/Avatar_Menina_GenZ.svg", "/Avatar_Menina2_GenZ.svg"];
+const AVATARS_M = ["/Avatar_Menino_GenZ.svg", "/Avatar_Menino2_GenZ.svg"];
+
+function guessGender(name: string): "M" | "F" {
+  const first = name.trim().split(/\s+/)[0].toLowerCase();
+  const femEndings = ["a", "ane", "ene", "ice", "ilde", "ine", "ise", "ete", "ude"];
+  const mascExceptions = new Set([
+    "luca", "josua", "nikita", "sascha", "costa", "borba", "moura",
+    "sousa", "souza", "silva", "vieira", "pereira", "oliveira",
+  ]);
+  const femExceptions = new Set([
+    "alice", "diane", "eliane", "fabiane", "juliane", "luciane",
+    "mariane", "viviane", "simone", "michele", "gisele", "noele",
+    "denise", "heloíse", "heloise", "cleide", "adelaide", "ione",
+    "marge", "irene", "marlene", "darlene",
+  ]);
+  if (femExceptions.has(first)) return "F";
+  if (mascExceptions.has(first)) return "M";
+  if (femEndings.some((e) => first.endsWith(e))) return "F";
+  return "M";
+}
+
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function getAvatar(name: string): string {
+  const gender = guessGender(name);
+  const pool = gender === "F" ? AVATARS_F : AVATARS_M;
+  return pool[hashCode(name) % pool.length];
+}
+
 export const Professors = () => {
+  const { selectedSchool } = useAuth();
+  const schoolId = selectedSchool?.id;
   const {
     data, instruments, curMo, setCurMo, selProf, setSelProf, selPay, setSelPay,
     viewKpis,
@@ -73,6 +112,7 @@ export const Professors = () => {
   const [npCost, setNpCost] = useState("100");
   const [npInstIds, setNpInstIds] = useState<string[]>([]);
   const [npNewInst, setNpNewInst] = useState("");
+  const [npAvatarBlob, setNpAvatarBlob] = useState<Blob | null>(null);
 
   // Add student form
   const [nsName, setNsName] = useState("");
@@ -81,6 +121,7 @@ export const Professors = () => {
   const [nsVal, setNsVal] = useState(data?.config.tuition.toString() || "358");
   const [nsEnroll, setNsEnroll] = useState(new Date().toISOString().split("T")[0]);
   const [nsInstId, setNsInstId] = useState("");
+  const [nsSubmitting, setNsSubmitting] = useState(false);
   const [nsExisting, setNsExisting] = useState(false);
   const [nsPersonId, setNsPersonId] = useState("");
 
@@ -97,6 +138,8 @@ export const Professors = () => {
   const [epName, setEpName] = useState("");
   const [epCost, setEpCost] = useState("");
   const [epNewInst, setEpNewInst] = useState("");
+  const [epAvatarBlob, setEpAvatarBlob] = useState<Blob | null>(null);
+  const [epAvatarRemoved, setEpAvatarRemoved] = useState(false);
 
   const { state: confirmState, confirm, close: confirmClose } = useConfirm();
 
@@ -138,8 +181,9 @@ export const Professors = () => {
     _tF = 0;
   const _paidPersonIds = new Set<string>();
   const _allPersonIds = new Set<string>();
+  let _totalEnrollments = 0;
   data.professors.forEach((p) => {
-    _tA += p.students.length;
+    _totalEnrollments += p.students.length;
     let py = 0;
     p.students.forEach((s) => {
       _allPersonIds.add(s.personId || s.id);
@@ -148,6 +192,7 @@ export const Professors = () => {
     });
     _tF += py * p.costPerStudent;
   });
+  _tA = _allPersonIds.size;
   const _tPg = _paidPersonIds.size;
   const _pF = _tR > 0 ? _tF / _tR : 0;
   const _tk = _tPg > 0 ? _tR / _tPg : 0;
@@ -159,17 +204,21 @@ export const Professors = () => {
   const churnedStudents = kpiMes?.churnedStudents ?? 0;
 
   const prof = selProf ? data.professors.find((p) => p.id === selProf) : null;
-
   const confirmAddProf = async () => {
     if (!npName.trim() || npInstIds.length === 0) return;
     const firstInstName = instruments.find(i => i.id === npInstIds[0])?.name || "";
-    await handleAddProfessor({ name: npName.trim(), instrument: firstInstName, costPerStudent: Number(npCost) || 100, instrumentIds: npInstIds });
+    const profId = await handleAddProfessor({ name: npName.trim(), instrument: firstInstName, costPerStudent: Number(npCost) || 100, instrumentIds: npInstIds });
+    if (profId && npAvatarBlob && schoolId) {
+      const url = await uploadProfessorAvatar(npAvatarBlob, schoolId, profId);
+      if (url) await handleUpdateProfessor(profId, { avatarUrl: url });
+    }
     setShowAddProf(false);
-    setNpName(""); setNpCost("100"); setNpInstIds([]); setNpNewInst("");
+    setNpName(""); setNpCost("100"); setNpInstIds([]); setNpNewInst(""); setNpAvatarBlob(null);
   };
 
   const confirmAddStudent = async (pid: string) => {
-    if (!nsName.trim()) return;
+    if (!nsName.trim() || nsSubmitting) return;
+    setNsSubmitting(true);
     await handleAddStudent(pid, {
       name: nsName.trim(),
       day: nsDay,
@@ -182,6 +231,7 @@ export const Professors = () => {
     setShowAddStud(null);
     setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
     setNsExisting(false); setNsPersonId("");
+    setNsSubmitting(false);
   };
 
   const openEditStudent = (s: Student) => {
@@ -238,16 +288,25 @@ export const Professors = () => {
     setEpName(p.name);
     setEpCost(p.costPerStudent.toString());
     setEpNewInst("");
+    setEpAvatarBlob(null);
+    setEpAvatarRemoved(false);
   };
 
   const saveEditProf = async () => {
-    if (!editProf) return;
-    const updates: { name?: string; costPerStudent?: number } = {};
+    if (!editProf || !schoolId) return;
+    const updates: { name?: string; costPerStudent?: number; avatarUrl?: string | null } = {};
     const currentProf = data.professors.find(p => p.id === editProf);
     if (!currentProf) return;
     if (epName.trim() && epName.trim() !== currentProf.name) updates.name = epName.trim();
     const newCost = Number(epCost);
     if (newCost > 0 && newCost !== currentProf.costPerStudent) updates.costPerStudent = newCost;
+    if (epAvatarBlob) {
+      const url = await uploadProfessorAvatar(epAvatarBlob, schoolId, editProf);
+      if (url) updates.avatarUrl = url;
+    } else if (epAvatarRemoved && currentProf.avatarUrl) {
+      await deleteProfessorAvatar(schoolId, editProf);
+      updates.avatarUrl = null;
+    }
     if (Object.keys(updates).length > 0) await handleUpdateProfessor(editProf, updates);
     setEditProf(null);
   };
@@ -266,13 +325,13 @@ export const Professors = () => {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">Professores</h1>
             <p className="text-xs mt-1 text-text-secondary">
-              {data.professors.length} profs · {data.professors.reduce((s, p) => s + p.students.length, 0)} alunos · {MF[curMo]}
+              {data.professors.length} profs · {_tA} alunos · {MF[curMo]}
             </p>
           </div>
           <MonthSelector curMo={curMo} setCurMo={setCurMo} />
         </div>
         <div className="flex justify-end">
-          <button onClick={() => setShowAddProf(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-semibold shadow-lg shadow-violet-500/25 hover:shadow-xl transition-all border-none cursor-pointer">
+          <button onClick={() => setShowAddProf(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-all border-none cursor-pointer">
             <Plus size={14} /> Novo Professor
           </button>
         </div>
@@ -297,7 +356,7 @@ export const Professors = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
-          {data.professors.map((p) => {
+          {data.professors.map((p, profIdx) => {
             const pay = p.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length;
             const rev = p.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0);
             const pp = rev > 0 ? (pay * p.costPerStudent) / rev : 0;
@@ -315,9 +374,8 @@ export const Professors = () => {
                 )}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center",
-                      selProf === p.id ? "bg-accent-blue text-surface-primary" : "bg-surface-tertiary text-text-tertiary")}>
-                      <Music size={14} />
+                    <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden">
+                      <img src={p.avatarUrl || getAvatar(p.name)} alt="Avatar" className="w-full h-full object-cover" />
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-text-primary">{p.name}</p>
@@ -347,8 +405,8 @@ export const Professors = () => {
             <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-surface-tertiary flex items-center justify-center text-text-tertiary border border-border-secondary">
-                    <Music size={20} strokeWidth={2} />
+                  <div className="w-16 h-16 rounded-full shrink-0 overflow-hidden">
+                    <img src={prof.avatarUrl || getAvatar(prof.name)} alt="Avatar" className="w-full h-full object-cover" />
                   </div>
                   <div>
                     <button
@@ -495,6 +553,10 @@ export const Professors = () => {
         size="sm"
       >
         <div className="space-y-4">
+          <AvatarUploader
+            fallbackUrl={npName.trim() ? getAvatar(npName.trim()) : "/Avatar_Menino_GenZ.svg"}
+            onCropped={(blob) => setNpAvatarBlob(blob)}
+          />
           <div>
             <label className={lbl}>Nome</label>
             <input value={npName} onChange={(e) => setNpName(e.target.value)} className={inp} placeholder="Ex: João Silva" autoFocus />
@@ -643,7 +705,9 @@ export const Professors = () => {
         </div>
         <div className="flex gap-2 mt-6">
           <button onClick={() => setShowAddStud(null)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
-          <button onClick={() => showAddStud && confirmAddStudent(showAddStud)} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">Cadastrar Aluno</button>
+          <button onClick={() => showAddStud && confirmAddStudent(showAddStud)} disabled={nsSubmitting} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+            {nsSubmitting ? "Cadastrando..." : "Cadastrar Aluno"}
+          </button>
         </div>
       </Modal>
 
@@ -721,7 +785,7 @@ export const Professors = () => {
         </div>
         <div className="flex gap-2 mt-6">
           <button onClick={() => setEditStudent(null)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
-          <button onClick={saveEditStudent} className="flex-1 py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">Salvar Alterações</button>
+          <button onClick={saveEditStudent} className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">Salvar Alterações</button>
         </div>
       </Modal>
 
@@ -738,6 +802,12 @@ export const Professors = () => {
           const availableInsts = instruments.filter(i => !ep.instruments.some(pi => pi.id === i.id));
           return (
             <div className="space-y-4">
+              <AvatarUploader
+                currentUrl={ep.avatarUrl}
+                fallbackUrl={getAvatar(ep.name)}
+                onCropped={(blob) => setEpAvatarBlob(blob)}
+                onRemove={() => { setEpAvatarRemoved(true); setEpAvatarBlob(null); }}
+              />
               <div>
                 <label className={lbl}>Nome</label>
                 <input value={epName} onChange={(e) => setEpName(e.target.value)} className={inp} autoFocus />
@@ -797,7 +867,7 @@ export const Professors = () => {
               </div>
               <button
                 onClick={saveEditProf}
-                className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+                className="w-full py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
               >
                 Salvar Alterações
               </button>

@@ -26,7 +26,18 @@ const SUGGESTED_CC = [
 ];
 
 export const Financial = () => {
-  const { data, curMo, setCurMo, calcMo, viewKpis, handleUpdateRevenue, handleUpdateExpense, handleAddExpenseItem, handleUpdateExpenseItem, handleDeleteExpenseItem, handleAddCostCenter, handleUpdateCostCenter, handleDeleteCostCenter } = useData();
+  const {
+    data, curMo, setCurMo, calcMo, viewKpis,
+    handleUpdateRevenue, handleAddRevenueCategory, handleUpdateRevenueCategory, handleDeleteRevenueCategory,
+    handleUpdateExpense, handleAddExpenseItem, handleUpdateExpenseItem, handleDeleteExpenseItem,
+    handleAddCostCenter, handleUpdateCostCenter, handleDeleteCostCenter
+  } = useData();
+
+  // Revenue Categories
+  const [showAddRev, setShowAddRev] = useState(false);
+  const [nrName, setNrName] = useState("");
+  const [editRev, setEditRev] = useState<{ id: string; name: string } | null>(null);
+
   const [showAddExp, setShowAddExp] = useState<number | null>(null);
   const [neN, setNeN] = useState("");
   const [neT, setNeT] = useState<"F" | "V">("F");
@@ -58,8 +69,36 @@ export const Financial = () => {
     "w-20 text-right px-2 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-border-hover transition-all bg-surface-tertiary border-border-secondary text-text-primary"
   );
 
-  const updateRev = (k: keyof typeof data.revenue, v: string) => {
-    handleUpdateRevenue(k, curMo, Number(v) || 0);
+  // Revenue Category handlers
+  const updateRev = (categoryId: string, v: string) => {
+    handleUpdateRevenue(categoryId, curMo, Number(v) || 0);
+  };
+
+  const confirmAddRev = async () => {
+    if (!nrName.trim()) return;
+    await handleAddRevenueCategory(nrName.trim());
+    setShowAddRev(false);
+    setNrName("");
+  };
+
+  const removeRev = (id: string) => {
+    confirm({
+      title: "Remover Receita",
+      message: "Remover esta categoria de receita e todos os seus lançamentos? Esta ação não pode ser desfeita.",
+      confirmLabel: "Remover",
+      variant: "danger",
+      onConfirm: () => handleDeleteRevenueCategory(id),
+    });
+  };
+
+  const openEditRev = (rc: { id: string; name: string }) => {
+    setEditRev({ id: rc.id, name: rc.name });
+  };
+
+  const saveEditRev = async () => {
+    if (!editRev || !editRev.name.trim()) return;
+    await handleUpdateRevenueCategory(editRev.id, editRev.name.trim());
+    setEditRev(null);
   };
 
   const updateExp = (ci: number, ii: number, v: string) => {
@@ -204,33 +243,44 @@ export const Financial = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className={cd}>
-          <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
-            Receitas
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+              Receitas
+            </h3>
+            <button
+              onClick={() => setShowAddRev(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-tertiary text-text-primary text-[10px] font-semibold hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer"
+            >
+              <Plus size={12} /> Nova Receita
+            </button>
+          </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between py-2 px-3 rounded-lg border bg-surface-tertiary border-border-secondary">
               <span className="text-[11px] font-medium text-text-secondary">
-                Mensalidades (auto)
+                Parcelas/Mensalidades (auto)
               </span>
               <span className="text-[11px] font-mono font-medium text-accent-green">
                 {brl(calc.tuition)}
               </span>
             </div>
-            {[
-              { k: "enrollments" as const, l: "Matrículas" },
-              { k: "shop" as const, l: "Lojinha" },
-              { k: "events" as const, l: "Eventos" },
-              { k: "interest" as const, l: "Juros/Multas" },
-              { k: "other" as const, l: "Outras" },
-            ].map((r) => (
-              <div key={r.k} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-surface-tertiary/50 transition-colors">
-                <span className="text-[11px] text-text-secondary">{r.l}</span>
-                <input
-                  type="number"
-                  value={data.revenue?.[r.k]?.[curMo] || 0}
-                  onChange={(e) => updateRev(r.k, e.target.value)}
-                  className={inp}
-                />
+            {(data.revenue || []).map((r) => (
+              <div key={r.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-surface-tertiary/50 transition-colors">
+                <button
+                  onClick={() => openEditRev(r)}
+                  className="text-[11px] border-none bg-transparent cursor-pointer p-0 transition-colors text-text-secondary hover:text-accent-blue text-left"
+                >
+                  {r.name}
+                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={r.amounts?.[curMo] || ""}
+                    onChange={(e) => updateRev(r.id, e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    className={inp}
+                    placeholder="0"
+                  />
+                </div>
               </div>
             ))}
             <div className="flex items-center justify-between py-2.5 px-3 rounded-lg font-semibold border-t border-border-primary mt-2">
@@ -329,9 +379,11 @@ export const Financial = () => {
                     </span>
                     <input
                       type="number"
-                      value={it.amounts?.[curMo] || 0}
+                      value={it.amounts?.[curMo] || ""}
                       onChange={(e) => updateExp(ci, ii, e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       className={inp}
+                      placeholder="0"
                       style={{ width: "80px" }}
                     />
                     <button
@@ -395,7 +447,7 @@ export const Financial = () => {
           </div>
           <button
             onClick={confirmAddExp}
-            className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+            className="w-full py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Adicionar
           </button>
@@ -463,7 +515,7 @@ export const Financial = () => {
           </div>
           <button
             onClick={confirmAddCC}
-            className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+            className="w-full py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Criar Centro de Custo
           </button>
@@ -498,7 +550,7 @@ export const Financial = () => {
               ))}
             </div>
           </div>
-          <button onClick={saveEditCC} className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2">
+          <button onClick={saveEditCC} className="w-full py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2">
             Salvar
           </button>
         </div>
@@ -539,7 +591,7 @@ export const Financial = () => {
               >Variável</button>
             </div>
           </div>
-          <button onClick={saveEditEI} className="w-full py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2">
+          <button onClick={saveEditEI} className="w-full py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2">
             Salvar
           </button>
         </div>
@@ -555,6 +607,69 @@ export const Financial = () => {
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
       />
+
+      {/* Modal Nova Receita */}
+      <Modal
+        open={showAddRev}
+        onOpenChange={setShowAddRev}
+        title="Nova Categoria de Receita"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Nome</label>
+            <input
+              value={nrName}
+              onChange={(e) => setNrName(e.target.value)}
+              placeholder="Ex: Aluguel de Estúdio"
+              className={inpFull}
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") confirmAddRev(); }}
+            />
+          </div>
+          <button
+            onClick={confirmAddRev}
+            className="w-full py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+          >
+            Criar Receita
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal Editar Receita */}
+      <Modal
+        open={!!editRev}
+        onOpenChange={(v) => { if (!v) setEditRev(null); }}
+        title="Editar Categoria de Receita"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Nome</label>
+            <input
+              value={editRev?.name || ""}
+              onChange={(e) => setEditRev(prev => prev ? { ...prev, name: e.target.value } : null)}
+              className={inpFull}
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => { if (editRev) removeRev(editRev.id); setEditRev(null); }}
+              className="flex-1 py-2.5 rounded-lg bg-surface-tertiary text-accent-red text-xs font-semibold hover:bg-accent-red/10 transition-all border border-border-secondary cursor-pointer"
+            >
+              Excluir
+            </button>
+            <button
+              onClick={saveEditRev}
+              className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
+            >
+              Salvar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
 };

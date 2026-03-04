@@ -60,7 +60,7 @@ export const Config = () => {
             </div>
             <div>
               <label className="text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider">
-                Mensalidade
+                Parcela
               </label>
               <input
                 type="number"

@@ -268,7 +268,7 @@ export const Payables = () => {
           <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">Lançamentos de {MF[curMo]}</h3>
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
           >
             <Plus size={14} /> Nova Conta
           </button>
@@ -397,7 +397,7 @@ export const Payables = () => {
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className={lbl}>Item de Despesa <span className="font-normal text-text-tertiary">(opcional)</span></label>
+                <label className={lbl}>Item de Despesa</label>
                 <button onClick={() => setIsNewEi(!isNewEi)} className="text-[9px] text-accent-blue font-semibold border-none bg-transparent cursor-pointer">
                   {isNewEi ? "Selecionar" : "+ Novo Item"}
                 </button>
@@ -409,7 +409,7 @@ export const Payables = () => {
                   value={eiId}
                   onValueChange={setEiId}
                   options={eiOptions}
-                  placeholder={eiOptions.length === 0 && ccId ? "Nenhum item — crie um" : "Selecione..."}
+                  placeholder={eiOptions.length === 0 && ccId ? "Crie um novo item" : "Selecione..."}
                   disabled={!ccId || isNewCc}
                 />
               )}
@@ -453,7 +453,7 @@ export const Payables = () => {
         <div className="flex gap-2 mt-6">
           <button
             onClick={handleSaveBill}
-            className="flex-1 py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Salvar Conta
           </button>
@@ -481,7 +481,7 @@ export const Payables = () => {
         <div className="flex gap-2 mt-6">
           <button
             onClick={saveEdit}
-            className="flex-1 py-2.5 rounded-lg bg-accent-blue text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
           >
             Salvar
           </button>

@@ -31,6 +31,7 @@ export interface Professor {
   name: string;
   instrument: string;
   costPerStudent: number;
+  avatarUrl?: string;
   instruments: Instrument[];
   students: Student[];
 }
@@ -50,12 +51,11 @@ export interface CostCenter {
   cc?: number;
 }
 
-export interface Revenue {
-  enrollments: number[];
-  shop: number[];
-  events: number[];
-  interest: number[];
-  other: number[];
+export interface RevenueCategory {
+  id: string;
+  name: string;
+  slug: string;
+  amounts: number[];
 }
 
 export interface Config {
@@ -85,7 +85,7 @@ export interface DashboardData {
   config: Config;
   professors: Professor[];
   expenses: CostCenter[];
-  revenue: Revenue;
+  revenue: RevenueCategory[];
   payableBills: PayableBill[];
 }
 

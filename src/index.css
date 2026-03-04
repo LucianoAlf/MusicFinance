@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:wght@600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "DM Sans", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+  --font-logo: "Playfair Display", Georgia, serif;
   
   --color-surface-primary: var(--bg-primary);
   --color-surface-secondary: var(--bg-secondary);
@@ -23,43 +24,52 @@
   --color-accent-amber: var(--accent-amber);
   --color-accent-blue: var(--accent-blue);
   --color-accent-cyan: var(--accent-cyan);
+  --color-primary-btn-bg: var(--accent-primary-btn-bg);
+  --color-primary-btn-text: var(--accent-primary-btn-text);
 }
 
 @layer base {
   :root {
-    --bg-primary: #0A0A0B;
-    --bg-secondary: #111113;
-    --bg-tertiary: #1A1A1E;
-    --bg-accent: #1E1E24;
+    --bg-primary: #161618;
+    --bg-secondary: #1C1C1F;
+    --bg-tertiary: #232326;
+    --bg-accent: #28282C;
     
-    --border-primary: #222228;
-    --border-secondary: #2A2A32;
-    --border-hover: #3A3A44;
+    --border-primary: #2C2C31;
+    --border-secondary: #343439;
+    --border-hover: #444449;
     
-    --text-primary: #F0F0F2;
-    --text-secondary: #8A8A96;
-    --text-tertiary: #5A5A66;
+    --text-primary: #EDEDEF;
+    --text-secondary: #9494A0;
+    --text-tertiary: #65656F;
     
     --accent-green: #00D084;
     --accent-red: #FF4D4D;
     --accent-amber: #FFB020;
     --accent-blue: #3B82F6;
     --accent-cyan: #06B6D4;
+    
+    --accent-primary-btn-bg: #EDEDEF;
+    --accent-primary-btn-text: #161618;
   }
   
   .light {
-    --bg-primary: #FAFAFA;
+    --bg-primary: #FDFCF8; /* Fundo mais claro, estilo Vercel */
     --bg-secondary: #FFFFFF;
-    --bg-tertiary: #F5F5F5;
-    --bg-accent: #E8E8EC;
+    --bg-tertiary: #F3F1EC;
+    --bg-accent: #EAE7DF;
     
-    --border-primary: #E8E8EC;
-    --border-secondary: #D4D4D8;
-    --border-hover: #A1A1AA;
+    --border-primary: #EAE7DF;
+    --border-secondary: #E0DCD1;
+    --border-hover: #D1CDA;
     
-    --text-primary: #111113;
-    --text-secondary: #6B6B76;
-    --text-tertiary: #A1A1AA;
+    --text-primary: #1A1A1A; /* Texto quase preto */
+    --text-secondary: #666666;
+    --text-tertiary: #999999;
+    
+    --accent-blue: #1A1A1A; /* Preto no lugar do azul para ficar chic */
+    --accent-primary-btn-bg: #181715;
+    --accent-primary-btn-text: #FAFAFA;
   }
 }
 

@@ -110,7 +110,7 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-6 py-2.5 rounded-lg bg-accent-blue text-surface-primary font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer border-none"
+            className="w-full mt-6 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer border-none"
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
             Criar escola

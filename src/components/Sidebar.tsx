@@ -7,7 +7,6 @@ import {
   Calendar,
   TrendingUp,
   Settings,
-  Music,
   ChevronLeft,
   ChevronRight,
   Receipt,
@@ -38,11 +37,11 @@ export const Sidebar = () => {
           sideCol ? "justify-center" : "px-5"
         )}
       >
-        <div className="flex items-center justify-center text-text-primary flex-shrink-0">
-          <Music size={18} strokeWidth={2.5} />
+        <div className="flex items-center justify-center flex-shrink-0">
+          <img src="/Avatar_Porquinho.png" alt="Logo" className="w-7 h-7" />
         </div>
         {!sideCol && (
-          <span className="font-semibold text-sm tracking-tight text-text-primary">
+          <span className="font-logo text-[16px] font-bold tracking-tight text-text-primary">
             MusicFinance
           </span>
         )}
@@ -53,9 +52,9 @@ export const Sidebar = () => {
             key={it.id}
             onClick={() => setPage(it.id)}
             className={cn(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all border-none cursor-pointer text-left",
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all border-none cursor-pointer text-left",
               page === it.id
-                ? "bg-surface-tertiary text-text-primary"
+                ? "bg-surface-tertiary text-text-primary shadow-sm font-semibold"
                 : "text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary/50",
               sideCol && "justify-center px-0"
             )}
@@ -70,7 +69,7 @@ export const Sidebar = () => {
         <button
           onClick={() => setSideCol(!sideCol)}
           className={cn(
-            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all border-none cursor-pointer text-left text-text-tertiary hover:bg-surface-tertiary hover:text-text-secondary",
+            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all border-none cursor-pointer text-left text-text-tertiary hover:bg-surface-tertiary hover:text-text-secondary",
             sideCol && "justify-center px-0"
           )}
         >

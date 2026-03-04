@@ -8,13 +8,13 @@ import type {
   Instrument,
   CostCenter,
   ExpenseItem,
-  Revenue,
+  RevenueCategory,
   PayableBill,
   Config,
 } from "../types";
 
 // ─── Row types from Supabase ───────────────────────────────────────────────
-interface DbProfessor { id: string; name: string; instrument: string; cost_per_student: number; }
+interface DbProfessor { id: string; name: string; instrument: string; cost_per_student: number; avatar_url: string | null; }
 interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; }
 interface DbInstrument { id: string; school_id: string; name: string; }
 interface DbProfInstrument { professor_id: string; instrument_id: string; instruments: { id: string; name: string } | { id: string; name: string }[] | null; }
@@ -48,7 +48,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     profInstrumentsRes,
   ] = await Promise.all([
     supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).single(),
-    supabase.from("professors").select("id, name, instrument, cost_per_student").eq("school_id", schoolId).eq("active", true).order("name"),
+    supabase.from("professors").select("id, name, instrument, cost_per_student, avatar_url").eq("school_id", schoolId).eq("active", true).order("name"),
     supabase.from("students").select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id").eq("school_id", schoolId).order("name"),
     supabase.from("payments").select("id, student_id, year, month, amount, status").eq("school_id", schoolId),
     supabase.from("cost_centers").select("id, name, color, sort_order").eq("school_id", schoolId).order("sort_order"),
@@ -106,6 +106,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
       name: p.name,
       instrument: p.instrument || "",
       costPerStudent: Number(p.cost_per_student),
+      avatarUrl: p.avatar_url || undefined,
       instruments: profInsts,
       students: students
         .filter((s) => s.professor_id === p.id)
@@ -151,15 +152,16 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
       } as ExpenseItem)),
   }));
 
-  const builtRevenue: Revenue = { enrollments: Array(12).fill(0), shop: Array(12).fill(0), events: Array(12).fill(0), interest: Array(12).fill(0), other: Array(12).fill(0) };
-  revCats.forEach((cat) => {
-    const key = cat.slug as keyof Revenue;
-    if (key in builtRevenue) {
-      builtRevenue[key] = Array.from({ length: 12 }, (_, m) => {
+  const builtRevenue: RevenueCategory[] = revCats.map((cat) => {
+    return {
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      amounts: Array.from({ length: 12 }, (_, m) => {
         const rev = revenues.find((r) => r.category_id === cat.id && r.year === year && r.month === m + 1);
         return rev ? Number(rev.amount) : 0;
-      });
-    }
+      }),
+    };
   });
 
   const eiMap = new Map(expenseItems.map((ei) => [ei.id, ei.cost_center_id]));
@@ -215,8 +217,10 @@ export async function loadAvgTenure(schoolId: string) {
 
 // ─── WRITES: Professors ────────────────────────────────────────────────────
 
-export async function addProfessor(schoolId: string, data: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) {
-  const res = await supabase.from("professors").insert({ school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent }).select("id, name, instrument, cost_per_student").single();
+export async function addProfessor(schoolId: string, data: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[]; avatarUrl?: string }) {
+  const row: any = { school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent };
+  if (data.avatarUrl) row.avatar_url = data.avatarUrl;
+  const res = await supabase.from("professors").insert(row).select("id, name, instrument, cost_per_student, avatar_url").single();
   if (res.data && data.instrumentIds && data.instrumentIds.length > 0) {
     const links = data.instrumentIds.map(iid => ({ professor_id: res.data.id, instrument_id: iid }));
     await supabase.from("professor_instruments").insert(links);
@@ -224,15 +228,33 @@ export async function addProfessor(schoolId: string, data: { name: string; instr
   return res;
 }
 
-export async function updateProfessor(profId: string, data: { name?: string; costPerStudent?: number }) {
+export async function updateProfessor(profId: string, data: { name?: string; costPerStudent?: number; avatarUrl?: string | null }) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
   if (data.costPerStudent !== undefined) update.cost_per_student = data.costPerStudent;
-  return supabase.from("professors").update(update).eq("id", profId).select("id, name, instrument, cost_per_student").single();
+  if (data.avatarUrl !== undefined) update.avatar_url = data.avatarUrl;
+  return supabase.from("professors").update(update).eq("id", profId).select("id, name, instrument, cost_per_student, avatar_url").single();
 }
 
 export async function deleteProfessor(profId: string) {
   return supabase.from("professors").delete().eq("id", profId);
+}
+
+// ─── WRITES: Professor Avatar ─────────────────────────────────────────────
+
+export async function uploadProfessorAvatar(file: Blob, schoolId: string, professorId: string): Promise<string | null> {
+  const path = `${schoolId}/${professorId}.jpg`;
+  const { error: rmErr } = await supabase.storage.from("professor-avatars").remove([path]);
+  if (rmErr) console.warn("Remove old avatar:", rmErr.message);
+  const { error } = await supabase.storage.from("professor-avatars").upload(path, file, { contentType: "image/jpeg", upsert: true });
+  if (error) { console.error("Upload avatar error:", error.message); return null; }
+  const { data: urlData } = supabase.storage.from("professor-avatars").getPublicUrl(path);
+  return urlData?.publicUrl ? `${urlData.publicUrl}?t=${Date.now()}` : null;
+}
+
+export async function deleteProfessorAvatar(schoolId: string, professorId: string): Promise<void> {
+  const path = `${schoolId}/${professorId}.jpg`;
+  await supabase.storage.from("professor-avatars").remove([path]);
 }
 
 // ─── WRITES: Students ──────────────────────────────────────────────────────
@@ -331,6 +353,20 @@ export async function upsertExpense(data: { expenseItemId: string; schoolId: str
 }
 
 // ─── WRITES: Revenue ───────────────────────────────────────────────────────
+
+export async function addRevenueCategory(schoolId: string, name: string) {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+  return supabase.from("revenue_categories").insert({ school_id: schoolId, name, slug }).select("id, name, slug, sort_order").single();
+}
+
+export async function updateRevenueCategory(categoryId: string, name: string) {
+  return supabase.from("revenue_categories").update({ name }).eq("id", categoryId).select("id, name, slug, sort_order").single();
+}
+
+export async function deleteRevenueCategory(categoryId: string) {
+  await supabase.from("revenues").delete().eq("category_id", categoryId);
+  return supabase.from("revenue_categories").delete().eq("id", categoryId);
+}
 
 export async function upsertRevenue(data: { schoolId: string; categoryId: string; year: number; month: number; amount: number }) {
   const { data: existing } = await supabase.from("revenues").select("id").eq("category_id", data.categoryId).eq("year", data.year).eq("month", data.month).maybeSingle();

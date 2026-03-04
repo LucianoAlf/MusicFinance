@@ -22,6 +22,9 @@ import {
   deleteExpenseItem as apiDeleteExpenseItem,
   upsertExpense as apiUpsertExpense,
   upsertRevenue as apiUpsertRevenue,
+  addRevenueCategory as apiAddRevenueCategory,
+  updateRevenueCategory as apiUpdateRevenueCategory,
+  deleteRevenueCategory as apiDeleteRevenueCategory,
   createBills as apiCreateBills,
   updateBill as apiUpdateBill,
   deleteBills as apiDeleteBills,
@@ -73,7 +76,10 @@ interface DataContextType {
   handleUpdateExpenseItem: (ccId: string, eiId: string, updates: { name?: string; type?: "F" | "V" }) => Promise<void>;
   handleDeleteExpenseItem: (ccId: string, eiId: string) => Promise<void>;
   handleUpdateExpense: (ccId: string, eiId: string, month: number, amount: number) => Promise<void>;
-  handleUpdateRevenue: (slug: string, month: number, amount: number) => Promise<void>;
+  handleAddRevenueCategory: (name: string) => Promise<string>;
+  handleUpdateRevenueCategory: (categoryId: string, name: string) => Promise<void>;
+  handleDeleteRevenueCategory: (categoryId: string) => Promise<void>;
+  handleUpdateRevenue: (categoryId: string, month: number, amount: number) => Promise<void>;
   handleSaveBills: (bills: PayableBill[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => Promise<void>;
   handleUpdateBill: (billId: string, updates: Partial<PayableBill>, expenseUpdates?: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => Promise<void>;
   handleDeleteBills: (billIds: string[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => Promise<void>;
@@ -88,7 +94,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { selectedSchool } = useAuth();
+  const { selectedSchool, setSelectedSchool } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -190,8 +196,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       pp += pay * p.costPerStudent;
     });
     const ps = paidPersonIds.size;
-    const rv = data.revenue || {} as any;
-    const rev = tui + (rv.enrollments?.[m] || 0) + (rv.shop?.[m] || 0) + (rv.events?.[m] || 0) + (rv.interest?.[m] || 0) + (rv.other?.[m] || 0);
+    const rv = data.revenue || [];
+    const extraRev = rv.reduce((sum, rc) => sum + (rc.amounts?.[m] || 0), 0);
+    const rev = tui + extraRev;
     let exp = pp, fc = 0, vc = pp;
     (data.expenses || []).forEach((cc) =>
       (cc.items || []).forEach((it) => { const a = it.amounts?.[m] || 0; exp += a; if (it.type === "F") fc += a; else vc += a; })
@@ -201,7 +208,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ─── Write handlers ────────────────────────────────────────────────────
 
-  const handleAddProfessor = async (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => {
+  const handleAddProfessor = async (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[]; avatarUrl?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiAddProfessor(schoolId, d);
@@ -210,12 +217,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const inst = instruments.find(i => i.id === iid);
       return { id: iid, name: inst?.name || "" };
     });
-    setData((prev) => prev ? { ...prev, professors: [...prev.professors, { id: row.id, name: row.name, instrument: row.instrument || "", costPerStudent: Number(row.cost_per_student), instruments: profInsts, students: [] }] } : prev);
+    setData((prev) => prev ? { ...prev, professors: [...prev.professors, { id: row.id, name: row.name, instrument: row.instrument || "", costPerStudent: Number(row.cost_per_student), avatarUrl: row.avatar_url || undefined, instruments: profInsts, students: [] }] } : prev);
     setSelProf(row.id);
     markSaved();
+    return row.id as string;
   };
 
-  const handleUpdateProfessor = async (profId: string, updates: { name?: string; costPerStudent?: number }) => {
+  const handleUpdateProfessor = async (profId: string, updates: { name?: string; costPerStudent?: number; avatarUrl?: string | null }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateProfessor(profId, updates);
@@ -226,6 +234,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...p,
         name: row.name ?? p.name,
         costPerStudent: Number(row.cost_per_student) ?? p.costPerStudent,
+        avatarUrl: row.avatar_url !== undefined ? (row.avatar_url || undefined) : p.avatarUrl,
       } : p),
     } : prev);
     markSaved();
@@ -428,21 +437,68 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleUpdateRevenue = async (slug: string, month: number, amount: number) => {
+  const handleUpdateRevenue = async (categoryId: string, month: number, amount: number) => {
     if (!data || !schoolId) return;
-    const catId = slugMapRef.current[slug];
-    if (!catId) return;
     setData((prev) => {
       if (!prev) return prev;
-      const key = slug as keyof typeof prev.revenue;
-      if (!(key in prev.revenue)) return prev;
-      const newArr = [...prev.revenue[key]];
-      newArr[month] = amount;
-      return { ...prev, revenue: { ...prev.revenue, [key]: newArr } };
+      return {
+        ...prev,
+        revenue: prev.revenue.map((rc) => 
+          rc.id === categoryId 
+            ? { ...rc, amounts: rc.amounts.map((a, i) => (i === month ? amount : a)) } 
+            : rc
+        )
+      };
     });
     markSaving();
-    const { error } = await apiUpsertRevenue({ schoolId, categoryId: catId, year: data.config.year, month: month + 1, amount });
+    const { error } = await apiUpsertRevenue({ schoolId, categoryId, year: data.config.year, month: month + 1, amount });
     if (error) { markError(); return; }
+    markSaved();
+  };
+
+  const handleAddRevenueCategory = async (name: string) => {
+    if (!data || !schoolId) return "";
+    markSaving();
+    const { data: row, error } = await apiAddRevenueCategory(schoolId, name);
+    if (error || !row) { markError(); return ""; }
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        revenue: [...prev.revenue, { id: row.id, name: row.name, slug: row.slug, amounts: Array(12).fill(0) }]
+      };
+    });
+    markSaved();
+    return row.id;
+  };
+
+  const handleUpdateRevenueCategory = async (categoryId: string, name: string) => {
+    if (!data) return;
+    markSaving();
+    const { data: row, error } = await apiUpdateRevenueCategory(categoryId, name);
+    if (error || !row) { markError(); return; }
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        revenue: prev.revenue.map((rc) => rc.id === categoryId ? { ...rc, name: row.name, slug: row.slug } : rc)
+      };
+    });
+    markSaved();
+  };
+
+  const handleDeleteRevenueCategory = async (categoryId: string) => {
+    if (!data) return;
+    markSaving();
+    const { error } = await apiDeleteRevenueCategory(categoryId);
+    if (error) { markError(); return; }
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        revenue: prev.revenue.filter((rc) => rc.id !== categoryId)
+      };
+    });
     markSaved();
   };
 
@@ -593,6 +649,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleUpdateConfig = async (key: string, value: string | number) => {
     if (!data || !schoolId) return;
     setData((prev) => prev ? { ...prev, config: { ...prev.config, [key]: value } } : prev);
+    if (key === "schoolName" && selectedSchool) {
+      setSelectedSchool({ ...selectedSchool, name: value as string });
+    }
     markSaving();
     const map: Record<string, string> = { schoolName: "name", year: "year", tuition: "defaultTuition", passport: "passportFee" };
     const apiKey = map[key] || key;

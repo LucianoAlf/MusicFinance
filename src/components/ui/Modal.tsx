@@ -87,7 +87,7 @@ export function ConfirmModal({
     "flex-1 py-2.5 rounded-xl text-xs font-bold border-none cursor-pointer transition-all",
     variant === "danger" && "bg-accent-red text-surface-primary hover:opacity-90",
     variant === "warning" && "bg-accent-amber text-surface-primary hover:opacity-90",
-    variant === "default" && "bg-accent-blue text-surface-primary hover:opacity-90"
+    variant === "default" && "bg-[#181715] text-[#FAFAFA] hover:opacity-90"
   );
 
   return (

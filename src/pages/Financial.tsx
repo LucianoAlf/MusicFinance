@@ -199,12 +199,13 @@ export const Financial = () => {
         <MonthSelector curMo={curMo} setCurMo={setCurMo} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <KpiCard label="Receita" value={brl(calc.revenue)} />
         <KpiCard label="Despesas" value={brl(calc.expenses)} />
         <KpiCard label="Resultado" value={brl(calc.profit)} />
         <KpiCard label="Margem" value={pct(calc.margin)} />
         <KpiCard label="Pagantes" value={calc.payingStudents} />
+        <KpiCard label="Custo/Aluno" value={brl(calc.costPerStudent)} sub={`${calc.activeStudents || 0} alunos ativos`} />
       </div>
 
       {(() => {

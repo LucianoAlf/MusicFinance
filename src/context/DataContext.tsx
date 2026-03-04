@@ -188,15 +188,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!data) return null;
     let tui = 0, pp = 0;
     const paidPersonIds = new Set<string>();
+    const activePersonIds = new Set<string>();
     (data.professors || []).forEach((p) => {
       let pay = 0;
       (p.students || []).forEach((s) => {
+        if (s.situation === "Ativo") activePersonIds.add(s.personId || s.id);
         const pm = s.payments && s.payments[m];
         if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; pay++; paidPersonIds.add(s.personId || s.id); }
       });
       pp += pay * p.costPerStudent;
     });
     const ps = paidPersonIds.size;
+    const activeCount = activePersonIds.size;
     const rv = data.revenue || [];
     const extraRev = rv.reduce((sum, rc) => sum + (rc.amounts?.[m] || 0), 0);
     const rev = tui + extraRev;
@@ -204,7 +207,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (data.expenses || []).forEach((cc) =>
       (cc.items || []).forEach((it) => { const a = it.amounts?.[m] || 0; exp += a; if (it.type === "F") fc += a; else vc += a; })
     );
-    return { month: MS[m], revenue: rev, expenses: exp, profit: rev - exp, margin: rev > 0 ? (rev - exp) / rev : 0, tuition: tui, payingStudents: ps, profPayroll: pp, ticket: ps > 0 ? tui / ps : 0, fixedCost: fc, varCost: vc, costPerStudent: ps > 0 ? exp / ps : 0 };
+    return { month: MS[m], revenue: rev, expenses: exp, profit: rev - exp, margin: rev > 0 ? (rev - exp) / rev : 0, tuition: tui, payingStudents: ps, activeStudents: activeCount, profPayroll: pp, ticket: ps > 0 ? tui / ps : 0, fixedCost: fc, varCost: vc, costPerStudent: activeCount > 0 ? exp / activeCount : 0 };
   };
 
   // ─── Write handlers ────────────────────────────────────────────────────

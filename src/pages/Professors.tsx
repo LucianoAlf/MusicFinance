@@ -345,7 +345,7 @@ export const Professors = () => {
         <KpiCard icon={Wallet} label="Folha Prof." value={brl(_tF)} color="red" />
         <KpiCard icon={Target} label="% Folha/Fat." value={pct(_pF)} color={_pF > 0.45 ? "red" : "green"} />
         <KpiCard icon={BarChart} label="Ticket Médio" value={brl(_tk)} color="teal" />
-        <KpiCard icon={Activity} label="Media Al/Prof" value={_ma.toFixed(1)} color="blue" />
+        <KpiCard icon={Activity} label="Média Aluno/Prof" value={_ma.toFixed(1)} color="blue" />
       </div>
 
       <div className="grid grid-cols-3 gap-2">

@@ -8,7 +8,6 @@ import type { Professor, Instrument } from "../types";
 export interface RawRow {
   professor: string;
   instrumentoProf: string;
-  custoAluno: string;
   nomeAluno: string;
   curso: string;
   situacao: string;
@@ -24,7 +23,6 @@ export interface RawRow {
 export interface ParsedRow {
   professorName: string;
   professorInstruments: string[];
-  costPerStudent: number | null;
   studentName: string;
   course: string;
   situation: string;
@@ -40,7 +38,6 @@ export interface ParsedRow {
 export interface SnapshotProfessor {
   name: string;
   instruments: string[];
-  costPerStudent: number | null;
   students: SnapshotStudent[];
 }
 
@@ -116,9 +113,6 @@ const HEADER_MAP: Record<string, keyof RawRow> = {
   "instrumento do professor": "instrumentoProf",
   "instrumento professor": "instrumentoProf",
   instrumentos: "instrumentoProf",
-  "custo aluno": "custoAluno",
-  "custo por aluno": "custoAluno",
-  custo: "custoAluno",
   "nome aluno": "nomeAluno",
   "nome do aluno": "nomeAluno",
   aluno: "nomeAluno",
@@ -317,7 +311,6 @@ export function normalizeRows(rows: RawRow[], year: number, month: number): Pars
   return rows.map((r) => ({
     professorName: normalizeName(r.professor || ""),
     professorInstruments: normalizeInstruments(r.instrumentoProf || ""),
-    costPerStudent: normalizeAmountOrNull(r.custoAluno || ""),
     studentName: normalizeName(r.nomeAluno || ""),
     course: normalizeName(r.curso || ""),
     situation: normalizeSituation(r.situacao || ""),
@@ -344,7 +337,6 @@ export function buildSnapshot(rows: ParsedRow[]): SnapshotProfessor[] {
       prof = {
         name: r.professorName,
         instruments: r.professorInstruments,
-        costPerStudent: r.costPerStudent,
         students: [],
       };
       profMap.set(key, prof);
@@ -357,9 +349,6 @@ export function buildSnapshot(rows: ParsedRow[]): SnapshotProfessor[] {
             existing.add(inst.toLowerCase());
           }
         }
-      }
-      if (r.costPerStudent != null && prof.costPerStudent == null) {
-        prof.costPerStudent = r.costPerStudent;
       }
     }
 
@@ -420,19 +409,11 @@ export function computeDiff(
     if (!ep) {
       actions.push({
         type: "CREATE_PROFESSOR",
-        label: `Novo professor: ${sp.name} (${sp.instruments.join(", ") || "sem instrumento"}) — Custo: R$ ${sp.costPerStudent ?? defaultTuition}`,
+        label: `Novo professor: ${sp.name} (${sp.instruments.join(", ") || "sem instrumento"}) — Custo: R$ 0 (configure depois)`,
         enabled: true,
-        data: { ...sp, costPerStudent: sp.costPerStudent ?? defaultTuition },
+        data: { ...sp, costPerStudent: 0 },
       });
     } else {
-      if (sp.costPerStudent != null && sp.costPerStudent !== ep.costPerStudent) {
-        actions.push({
-          type: "UPDATE_PROFESSOR",
-          label: `${sp.name}: custo R$ ${ep.costPerStudent} → R$ ${sp.costPerStudent}`,
-          enabled: true,
-          data: { professorId: ep.id, costPerStudent: sp.costPerStudent },
-        });
-      }
       for (const instName of sp.instruments) {
         if (!ep.instruments.some((i) => nameMatch(i.name, instName))) {
           const existInst = existInsts.find((i) => nameMatch(i.name, instName));
@@ -654,7 +635,7 @@ export async function executeActions(
           school_id: schoolId,
           name: d.name,
           instrument: d.instruments?.[0] || "",
-          cost_per_student: d.costPerStudent || defaultTuition,
+          cost_per_student: d.costPerStudent ?? 0,
         })
         .select("id")
         .single();
@@ -921,13 +902,13 @@ export async function saveImportHistory(
 // ─── Template generator ─────────────────────────────────────────────────────
 
 export function downloadTemplate() {
-  const headers = ["Professor", "Instrumento Prof", "Custo Aluno", "Nome Aluno", "Curso", "Situação", "Dia", "Horário", "Mensalidade", "Pagou", "Data Pgto", "Data Matrícula", "Data Saída"];
+  const headers = ["Professor", "Instrumento Prof", "Nome Aluno", "Curso", "Situação", "Dia", "Horário", "Mensalidade", "Pagou", "Data Pgto", "Data Matrícula", "Data Saída"];
   const sample = [
-    ["Maria Santos", "Piano, Canto", "100", "Pedro Lima", "Piano", "Ativo", "Seg", "14:00", "200", "200", "15/01/2026", "10/01/2026", ""],
-    ["Maria Santos", "Piano, Canto", "100", "Ana Silva", "Canto", "Ativo", "Ter", "10:00", "180", "180", "18/01/2026", "05/11/2025", ""],
-    ["Maria Santos", "Piano, Canto", "100", "Lucas Costa", "Piano", "Evadido", "", "", "200", "0", "", "15/05/2025", "30/01/2026"],
-    ["João Mendes", "Guitarra", "80", "Rafael Souza", "Guitarra", "Ativo", "Qua", "16:00", "150", "150", "20/01/2026", "12/01/2026", ""],
-    ["João Mendes", "Guitarra", "80", "Marcos Lima", "Guitarra", "Ativo", "Qui", "15:00", "150", "0", "", "08/08/2025", ""],
+    ["Maria Santos", "Piano, Canto", "Pedro Lima", "Piano", "Ativo", "Seg", "14:00", "200", "200", "15/01/2026", "10/01/2026", ""],
+    ["Maria Santos", "Piano, Canto", "Ana Silva", "Canto", "Ativo", "Ter", "10:00", "180", "180", "18/01/2026", "05/11/2025", ""],
+    ["Maria Santos", "Piano, Canto", "Lucas Costa", "Piano", "Evadido", "", "", "200", "0", "", "15/05/2025", "30/01/2026"],
+    ["João Mendes", "Guitarra", "Rafael Souza", "Guitarra", "Ativo", "Qua", "16:00", "150", "150", "20/01/2026", "12/01/2026", ""],
+    ["João Mendes", "Guitarra", "Marcos Lima", "Guitarra", "Ativo", "Qui", "15:00", "150", "0", "", "08/08/2025", ""],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);

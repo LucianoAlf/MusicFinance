@@ -57,7 +57,7 @@ interface DataContextType {
   handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<void>;
   handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string }) => Promise<void>;
   handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument | null>;
   handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
@@ -172,15 +172,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const calcMo = (m: number) => {
     if (!data) return null;
-    let tui = 0, pp = 0, ps = 0;
+    let tui = 0, pp = 0;
+    const paidPersonIds = new Set<string>();
     (data.professors || []).forEach((p) => {
       let pay = 0;
       (p.students || []).forEach((s) => {
         const pm = s.payments && s.payments[m];
-        if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; pay++; ps++; }
+        if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; pay++; paidPersonIds.add(s.personId || s.id); }
       });
       pp += pay * p.costPerStudent;
     });
+    const ps = paidPersonIds.size;
     const rv = data.revenue || {} as any;
     const rev = tui + (rv.enrollments?.[m] || 0) + (rv.shop?.[m] || 0) + (rv.events?.[m] || 0) + (rv.interest?.[m] || 0) + (rv.other?.[m] || 0);
     let exp = pp, fc = 0, vc = pp;
@@ -232,12 +234,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string }) => {
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const tuitionVal = d.tuition || data.config.tuition;
     const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
-    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId });
+    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId });
     if (error || !row) { markError(); return; }
 
     const payments12: (Payment | null)[] = [];
@@ -249,7 +251,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     for (const pi of paymentInserts) await apiUpsertPayment(pi);
 
     const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
-    const newStudent = { id: row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName };
+    const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName };
     setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
     markSaved();
   };

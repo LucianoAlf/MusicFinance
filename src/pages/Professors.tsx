@@ -81,6 +81,8 @@ export const Professors = () => {
   const [nsVal, setNsVal] = useState(data?.config.tuition.toString() || "358");
   const [nsEnroll, setNsEnroll] = useState(new Date().toISOString().split("T")[0]);
   const [nsInstId, setNsInstId] = useState("");
+  const [nsExisting, setNsExisting] = useState(false);
+  const [nsPersonId, setNsPersonId] = useState("");
 
   // Edit student modal state
   const [esName, setEsName] = useState("");
@@ -132,21 +134,24 @@ export const Professors = () => {
 
   let _tP = data.professors.length,
     _tA = 0,
-    _tPg = 0,
     _tR = 0,
     _tF = 0;
+  const _paidPersonIds = new Set<string>();
+  const _allPersonIds = new Set<string>();
   data.professors.forEach((p) => {
     _tA += p.students.length;
     let py = 0;
     p.students.forEach((s) => {
+      _allPersonIds.add(s.personId || s.id);
       const pm = s.payments && s.payments[curMo];
-      if (pm && pm.status === "PAID" && pm.amount > 0) { _tR += pm.amount; py++; _tPg++; }
+      if (pm && pm.status === "PAID" && pm.amount > 0) { _tR += pm.amount; py++; _paidPersonIds.add(s.personId || s.id); }
     });
     _tF += py * p.costPerStudent;
   });
+  const _tPg = _paidPersonIds.size;
   const _pF = _tR > 0 ? _tF / _tR : 0;
   const _tk = _tPg > 0 ? _tR / _tPg : 0;
-  const _ma = _tP > 0 ? _tA / _tP : 0;
+  const _ma = _tP > 0 ? _allPersonIds.size / _tP : 0;
 
   const kpiMes = viewKpis?.monthly?.find((k) => k.month === curMo + 1);
   const avgTenure = viewKpis?.avgTenureMonths ?? 0;
@@ -172,9 +177,11 @@ export const Professors = () => {
       tuition: Number(nsVal) || data.config.tuition,
       enrollmentDate: nsEnroll,
       instrumentId: nsInstId || undefined,
+      personId: nsExisting && nsPersonId ? nsPersonId : undefined,
     });
     setShowAddStud(null);
     setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
+    setNsExisting(false); setNsPersonId("");
   };
 
   const openEditStudent = (s: Student) => {
@@ -556,16 +563,52 @@ export const Professors = () => {
       {/* Modal Novo Aluno */}
       <Modal
         open={!!showAddStud}
-        onOpenChange={(v) => { if (!v) setShowAddStud(null); }}
+        onOpenChange={(v) => { if (!v) { setShowAddStud(null); setNsExisting(false); setNsPersonId(""); } }}
         title="Novo Aluno"
         dark={dark}
         size="sm"
       >
         <div className="space-y-3">
-          <div>
-            <label className={lbl}>Nome</label>
-            <input value={nsName} onChange={(e) => setNsName(e.target.value)} className={inp} placeholder="Ex: Ana Clara" autoFocus />
-          </div>
+          <label className={cn("flex items-center gap-2 cursor-pointer select-none py-1")}>
+            <input type="checkbox" checked={nsExisting} onChange={(e) => { setNsExisting(e.target.checked); if (!e.target.checked) { setNsPersonId(""); setNsName(""); } }} className="accent-violet-500 w-3.5 h-3.5" />
+            <span className={cn("text-[11px] font-medium", dark ? "text-slate-300" : "text-slate-600")}>Aluno já matriculado em outro curso</span>
+          </label>
+          {nsExisting ? (
+            <div>
+              <label className={lbl}>Selecionar aluno existente</label>
+              <Select
+                value={nsPersonId}
+                onValueChange={(val) => {
+                  setNsPersonId(val);
+                  const allStudents = data.professors.flatMap(p => p.students.map(s => ({ ...s, profName: p.name })));
+                  const match = allStudents.find(s => s.personId === val);
+                  if (match) setNsName(match.name);
+                }}
+                options={(() => {
+                  const currentProfStudentIds = new Set((data.professors.find(p => p.id === showAddStud)?.students || []).map(s => s.personId || s.id));
+                  const seen = new Set<string>();
+                  const opts: { value: string; label: string }[] = [];
+                  data.professors.forEach(p => {
+                    p.students.forEach(s => {
+                      const pid = s.personId || s.id;
+                      if (s.situation === "Ativo" && !currentProfStudentIds.has(pid) && !seen.has(pid)) {
+                        seen.add(pid);
+                        opts.push({ value: pid, label: `${s.name} (${s.instrumentName || "—"} - Prof. ${p.name})` });
+                      }
+                    });
+                  });
+                  return opts;
+                })()}
+                placeholder="Selecionar aluno..."
+                dark={dark}
+              />
+            </div>
+          ) : (
+            <div>
+              <label className={lbl}>Nome</label>
+              <input value={nsName} onChange={(e) => setNsName(e.target.value)} className={inp} placeholder="Ex: Ana Clara" autoFocus />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Horário</label>

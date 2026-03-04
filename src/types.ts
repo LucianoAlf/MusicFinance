@@ -13,6 +13,7 @@ export interface Instrument {
 
 export interface Student {
   id: string;
+  personId: string;
   name: string;
   situation: string;
   hour: string;

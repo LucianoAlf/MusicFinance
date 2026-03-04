@@ -15,7 +15,7 @@ import type {
 
 // ─── Row types from Supabase ───────────────────────────────────────────────
 interface DbProfessor { id: string; name: string; instrument: string; cost_per_student: number; }
-interface DbStudent { id: string; professor_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; }
+interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; }
 interface DbInstrument { id: string; school_id: string; name: string; }
 interface DbProfInstrument { professor_id: string; instrument_id: string; instruments: { id: string; name: string } | { id: string; name: string }[] | null; }
 interface DbPayment { id: string; student_id: string; year: number; month: number; amount: number; status: string; }
@@ -49,7 +49,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
   ] = await Promise.all([
     supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).single(),
     supabase.from("professors").select("id, name, instrument, cost_per_student").eq("school_id", schoolId).eq("active", true).order("name"),
-    supabase.from("students").select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id").eq("school_id", schoolId).order("name"),
+    supabase.from("students").select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id").eq("school_id", schoolId).order("name"),
     supabase.from("payments").select("id, student_id, year, month, amount, status").eq("school_id", schoolId),
     supabase.from("cost_centers").select("id, name, color, sort_order").eq("school_id", schoolId).order("sort_order"),
     supabase.from("expense_items").select("id, cost_center_id, name, expense_type, cost_centers!inner(school_id)").eq("cost_centers.school_id", schoolId),
@@ -118,6 +118,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
             });
           return {
             id: s.id,
+            personId: s.person_id || s.id,
             name: s.name,
             situation: s.situation || "Ativo",
             hour: s.lesson_time || "",
@@ -236,8 +237,8 @@ export async function deleteProfessor(profId: string) {
 
 // ─── WRITES: Students ──────────────────────────────────────────────────────
 
-export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string }) {
-  return supabase.from("students").insert({
+export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string }) {
+  const row: any = {
     school_id: schoolId,
     professor_id: data.professorId,
     name: data.name,
@@ -247,7 +248,9 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
     tuition_amount: data.tuition || null,
     enrollment_date: data.enrollmentDate || new Date().toISOString().split("T")[0],
     instrument_id: data.instrumentId || null,
-  }).select("id, professor_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id").single();
+  };
+  if (data.personId) row.person_id = data.personId;
+  return supabase.from("students").insert(row).select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id").single();
 }
 
 export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) {

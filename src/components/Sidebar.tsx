@@ -41,7 +41,7 @@ export const Sidebar = () => {
           <img src="/Avatar_Porquinho.png" alt="Logo" className="w-7 h-7" />
         </div>
         {!sideCol && (
-          <span className="font-logo text-[16px] font-bold tracking-tight text-text-primary">
+          <span className="font-logo text-[18px] font-extrabold tracking-tighter text-text-primary">
             MusicFinance
           </span>
         )}

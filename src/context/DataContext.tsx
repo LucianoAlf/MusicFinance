@@ -61,8 +61,8 @@ interface DataContextType {
   handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<void>;
   handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string }) => Promise<void>;
-  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number }) => Promise<void>;
+  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument | null>;
   handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
@@ -190,16 +190,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const paidPersonIds = new Set<string>();
     const activePersonIds = new Set<string>();
     (data.professors || []).forEach((p) => {
-      let pay = 0;
+      let activeForProf = 0;
       (p.students || []).forEach((s) => {
         if (s.situation === "Ativo") {
           activePersonIds.add(s.personId || s.id);
           expectedTui += s.tuitionAmount || 0;
+          activeForProf++;
         }
         const pm = s.payments && s.payments[m];
-        if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; pay++; paidPersonIds.add(s.personId || s.id); }
+        if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; paidPersonIds.add(s.personId || s.id); }
       });
-      pp += pay * p.costPerStudent;
+      pp += activeForProf * p.costPerStudent;
     });
     const ps = paidPersonIds.size;
     const activeCount = activePersonIds.size;
@@ -207,7 +208,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const extraRev = rv.reduce((sum, rc) => sum + (rc.amounts?.[m] || 0), 0);
     const rev = tui + extraRev;
     const expectedRevenue = expectedTui + extraRev;
-    let exp = pp, fc = 0, vc = pp;
+    let exp = pp, fc = pp, vc = 0;
     (data.expenses || []).forEach((cc) =>
       (cc.items || []).forEach((it) => { const a = it.amounts?.[m] || 0; exp += a; if (it.type === "F") fc += a; else vc += a; })
     );
@@ -258,7 +259,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string }) => {
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number }) => {
     if (!data || !schoolId) return;
     markSaving();
     const tuitionVal = d.tuition || data.config.tuition;
@@ -275,12 +276,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     for (const pi of paymentInserts) await apiUpsertPayment(pi);
 
     const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
-    const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName };
+    const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5 };
     setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
     markSaved();
   };
 
-  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string }) => {
+  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateStudent(studentId, updates);
@@ -305,6 +306,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             phone: row.phone || undefined,
             responsibleName: row.responsible_name || undefined,
             responsiblePhone: row.responsible_phone || undefined,
+            dueDay: row.due_day ?? s.dueDay,
           } : s),
         })),
       };

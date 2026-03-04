@@ -90,22 +90,24 @@ export const CourseBreakdown: React.FC<Props> = ({ professors, currentMonth }) =
             Rentabilidade por Curso — {MS[currentMonth]}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          {(["revenue", "profit", "margin", "students"] as const).map((key) => (
-            <button
-              key={key}
-              onClick={() => setSortBy(key)}
-              className={cn(
-                "px-2 py-1 text-[9px] rounded-md border-none cursor-pointer transition-colors font-medium",
-                sortBy === key
-                  ? "bg-surface-secondary text-text-primary"
-                  : "bg-transparent text-text-tertiary hover:text-text-secondary"
-              )}
-            >
-              {{ revenue: "Receita", profit: "Lucro", margin: "Margem", students: "Alunos" }[key]}
-            </button>
-          ))}
-        </div>
+        {courses.length > 1 && (
+          <div className="flex items-center gap-1 bg-surface-secondary p-0.5 rounded-lg border border-border-secondary">
+            {(["revenue", "profit", "margin", "students"] as const).map((key) => (
+              <button
+                key={key}
+                onClick={() => setSortBy(key)}
+                className={cn(
+                  "px-2.5 py-1 text-[9px] rounded-md border-none cursor-pointer transition-colors font-medium",
+                  sortBy === key
+                    ? "bg-surface-tertiary text-text-primary shadow-sm"
+                    : "bg-transparent text-text-tertiary hover:text-text-secondary"
+                )}
+              >
+                {{ revenue: "Receita", profit: "Lucro", margin: "Margem", students: "Alunos" }[key]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="divide-y divide-border-primary">

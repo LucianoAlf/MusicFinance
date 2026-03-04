@@ -109,6 +109,9 @@ export const Professors = () => {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [editProf, setEditProf] = useState<string | null>(null);
   const [showStatement, setShowStatement] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Add professor form
   const [npName, setNpName] = useState("");
@@ -124,6 +127,7 @@ export const Professors = () => {
   const [nsVal, setNsVal] = useState(data?.config.tuition.toString() || "358");
   const [nsEnroll, setNsEnroll] = useState(new Date().toISOString().split("T")[0]);
   const [nsInstId, setNsInstId] = useState("");
+  const [nsDueDay, setNsDueDay] = useState("5");
   const [nsSubmitting, setNsSubmitting] = useState(false);
   const [nsExisting, setNsExisting] = useState(false);
   const [nsPersonId, setNsPersonId] = useState("");
@@ -136,6 +140,7 @@ export const Professors = () => {
   const [esEnroll, setEsEnroll] = useState("");
   const [esTuition, setEsTuition] = useState("");
   const [esInstId, setEsInstId] = useState("");
+  const [esDueDay, setEsDueDay] = useState("5");
   const [esPhone, setEsPhone] = useState("");
   const [esRespName, setEsRespName] = useState("");
   const [esRespPhone, setEsRespPhone] = useState("");
@@ -150,14 +155,35 @@ export const Professors = () => {
   const { state: confirmState, confirm, close: confirmClose } = useConfirm();
 
   // Payment popover state
-  const [payPopover, setPayPopover] = useState<{ profId: string; studentId: string; month: number; payment: Payment | null; tuition: number } | null>(null);
+  const [payPopover, setPayPopover] = useState<{ profId: string; student: Student; month: number; payment: Payment | null; tuition: number } | null>(null);
   const [payAmount, setPayAmount] = useState("");
 
-  const getDisplayStatus = (pm: Payment | null, monthIdx: number): DisplayStatus => {
-    if (!pm) return "FUTURE";
-    if (pm.status === "PAID") return "PAID";
-    if (pm.status === "WAIVED") return "WAIVED";
-    if (monthIdx < curMo) return "LATE";
+  const getDisplayStatus = (s: Student, monthIdx: number): DisplayStatus => {
+    const pm = s.payments[monthIdx];
+    if (pm && pm.status === "PAID") return "PAID";
+    if (pm && pm.status === "WAIVED") return "WAIVED";
+    
+    const now = new Date();
+    const currentActualMonth = now.getMonth();
+    const currentActualDay = now.getDate();
+    const currentActualYear = now.getFullYear();
+    const selectedYear = data.config.year;
+
+    let isPast = false;
+    if (selectedYear < currentActualYear) {
+      isPast = true;
+    } else if (selectedYear === currentActualYear) {
+      if (monthIdx < currentActualMonth) {
+        isPast = true;
+      } else if (monthIdx === currentActualMonth) {
+        const due = s.dueDay ?? 5;
+        if (currentActualDay > due) {
+          isPast = true;
+        }
+      }
+    }
+
+    if (isPast) return "LATE";
     if (monthIdx > curMo) return "FUTURE";
     return "PENDING";
   };
@@ -190,13 +216,16 @@ export const Professors = () => {
   let _totalEnrollments = 0;
   data.professors.forEach((p) => {
     _totalEnrollments += p.students.length;
-    let py = 0;
+    let activeCount = 0;
     p.students.forEach((s) => {
       _allPersonIds.add(s.personId || s.id);
+      if (s.situation === "Ativo") {
+        activeCount++;
+      }
       const pm = s.payments && s.payments[curMo];
-      if (pm && pm.status === "PAID" && pm.amount > 0) { _tR += pm.amount; py++; _paidPersonIds.add(s.personId || s.id); }
+      if (pm && pm.status === "PAID" && pm.amount > 0) { _tR += pm.amount; _paidPersonIds.add(s.personId || s.id); }
     });
-    _tF += py * p.costPerStudent;
+    _tF += activeCount * p.costPerStudent;
   });
   _tA = _allPersonIds.size;
   const _tPg = _paidPersonIds.size;
@@ -233,10 +262,11 @@ export const Professors = () => {
       enrollmentDate: nsEnroll,
       instrumentId: nsInstId || undefined,
       personId: nsExisting && nsPersonId ? nsPersonId : undefined,
+      dueDay: Number(nsDueDay) || 5,
     });
     setShowAddStud(null);
     setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
-    setNsExisting(false); setNsPersonId("");
+    setNsExisting(false); setNsPersonId(""); setNsDueDay("5");
     setNsSubmitting(false);
   };
 
@@ -249,6 +279,7 @@ export const Professors = () => {
     setEsEnroll(s.enrollmentDate || "");
     setEsTuition(s.tuitionAmount?.toString() || data.config.tuition.toString());
     setEsInstId(s.instrumentId || "");
+    setEsDueDay(s.dueDay?.toString() || "5");
     setEsPhone(s.phone || "");
     setEsRespName(s.responsibleName || "");
     setEsRespPhone(s.responsiblePhone || "");
@@ -267,6 +298,7 @@ export const Professors = () => {
       phone: esPhone,
       responsibleName: esRespName,
       responsiblePhone: esRespPhone,
+      dueDay: Number(esDueDay) || 5,
     });
     setEditStudent(null);
   };
@@ -326,7 +358,7 @@ export const Professors = () => {
   const openPayPopover = (profId: string, s: Student, mi: number) => {
     const pm = s.payments[mi];
     const tuition = s.tuitionAmount || data.config.tuition;
-    setPayPopover({ profId, studentId: s.id, month: mi, payment: pm, tuition });
+    setPayPopover({ profId, student: s, month: mi, payment: pm, tuition });
     setPayAmount(pm ? pm.amount.toString() : tuition.toString());
   };
 
@@ -370,8 +402,9 @@ export const Professors = () => {
         <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
           {data.professors.map((p, profIdx) => {
             const pay = p.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length;
+            const activeForProf = p.students.filter((s) => s.situation === "Ativo").length;
             const rev = p.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0);
-            const pp = rev > 0 ? (pay * p.costPerStudent) / rev : 0;
+            const pp = rev > 0 ? (activeForProf * p.costPerStudent) / rev : 0;
             const ticketProf = pay > 0 ? rev / pay : 0;
             const prevRev = curMo > 0 ? p.students.reduce((sum, s) => { const pm = s.payments?.[curMo - 1]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0) : null;
             const trendProf = prevRev != null && prevRev > 0 ? ((rev - prevRev) / prevRev) * 100 : null;
@@ -449,7 +482,119 @@ export const Professors = () => {
                 </div>
               </div>
 
-              <div className="overflow-auto max-h-[58vh] mt-6">
+              {/* Bulk Payment Bar */}
+              {(() => {
+                const unpaid = prof.students.filter((s) => {
+                  if (s.situation !== "Ativo") return false;
+                  const pm = s.payments[curMo];
+                  return !pm || pm.status === "PENDING";
+                });
+                if (unpaid.length === 0) return null;
+
+                const toggleBulkMode = () => {
+                  if (bulkMode) {
+                    setBulkMode(false);
+                    setBulkSelected(new Set());
+                  } else {
+                    setBulkMode(true);
+                    setBulkSelected(new Set(unpaid.map((s) => s.id)));
+                  }
+                };
+
+                const toggleAll = () => {
+                  if (bulkSelected.size === unpaid.length) {
+                    setBulkSelected(new Set());
+                  } else {
+                    setBulkSelected(new Set(unpaid.map((s) => s.id)));
+                  }
+                };
+
+                const toggleOne = (id: string) => {
+                  setBulkSelected((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id); else next.add(id);
+                    return next;
+                  });
+                };
+
+                const confirmBulk = async () => {
+                  if (bulkSelected.size === 0) return;
+                  setBulkProcessing(true);
+                  const selected = unpaid.filter((s) => bulkSelected.has(s.id));
+                  for (const s of selected) {
+                    const amount = s.tuitionAmount || data.config.tuition;
+                    await handleConfirmPayment(prof.id, s.id, curMo, amount);
+                  }
+                  setBulkProcessing(false);
+                  setBulkMode(false);
+                  setBulkSelected(new Set());
+                };
+
+                return (
+                  <div className="mt-4 rounded-lg border border-border-secondary bg-surface-tertiary/50 p-3">
+                    {!bulkMode ? (
+                      <button
+                        onClick={toggleBulkMode}
+                        className="flex items-center gap-2 text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors border-none bg-transparent cursor-pointer p-0"
+                      >
+                        <CheckCircle size={14} className="text-accent-green" />
+                        Dar baixa no mês — {unpaid.length} {unpaid.length === 1 ? "pendente" : "pendentes"}
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={bulkSelected.size === unpaid.length}
+                              onChange={toggleAll}
+                              className="accent-accent-green w-3.5 h-3.5"
+                            />
+                            <span className="text-[11px] font-semibold text-text-primary">
+                              Selecionar todos ({unpaid.length})
+                            </span>
+                          </label>
+                          <button
+                            onClick={() => { setBulkMode(false); setBulkSelected(new Set()); }}
+                            className="text-[10px] text-text-tertiary hover:text-text-primary border-none bg-transparent cursor-pointer p-0 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                        <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                          {unpaid.map((s) => (
+                            <label key={s.id} className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-surface-tertiary cursor-pointer select-none transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={bulkSelected.has(s.id)}
+                                onChange={() => toggleOne(s.id)}
+                                className="accent-accent-green w-3.5 h-3.5"
+                              />
+                              <span className="text-[11px] text-text-primary flex-1">{s.name}</span>
+                              <span className="text-[10px] font-mono text-text-secondary">{brl(s.tuitionAmount || data.config.tuition)}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-border-primary">
+                          <span className="text-[10px] text-text-secondary">
+                            {bulkSelected.size} selecionados · Total: <span className="font-mono font-bold text-accent-green">{brl(unpaid.filter((s) => bulkSelected.has(s.id)).reduce((sum, s) => sum + (s.tuitionAmount || data.config.tuition), 0))}</span>
+                          </span>
+                          <button
+                            onClick={confirmBulk}
+                            disabled={bulkSelected.size === 0 || bulkProcessing}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-green text-surface-primary text-[11px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer"
+                          >
+                            <CheckCircle size={14} />
+                            {bulkProcessing ? "Processando..." : `Confirmar ${bulkSelected.size} pagamentos`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="overflow-auto max-h-[58vh] mt-4">
                 <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 z-10 bg-surface-secondary">
                     <tr>
@@ -519,7 +664,7 @@ export const Professors = () => {
                                   <div className="grid grid-cols-12 gap-2">
                                     {MS.map((m, mi) => {
                                       const pm = s.payments[mi];
-                                      const ds = getDisplayStatus(pm, mi);
+                                      const ds = getDisplayStatus(s, mi);
                                       const cellColor = {
                                         PAID: "bg-accent-green/10 text-accent-green",
                                         PENDING: "bg-accent-amber/15 text-accent-amber",
@@ -713,9 +858,17 @@ export const Professors = () => {
               <input type="number" value={nsVal} onChange={(e) => setNsVal(e.target.value)} className={inp} />
             </div>
             <div>
-              <label className={lbl}>Data de Matrícula</label>
-              <DatePicker value={nsEnroll} onChange={setNsEnroll} />
+              <label className={lbl}>Dia de Vencimento</label>
+              <Select
+                value={nsDueDay}
+                onValueChange={setNsDueDay}
+                options={Array.from({ length: 31 }, (_, i) => ({ value: (i + 1).toString(), label: `Dia ${i + 1}` }))}
+              />
             </div>
+          </div>
+          <div>
+            <label className={lbl}>Data de Matrícula</label>
+            <DatePicker value={nsEnroll} onChange={setNsEnroll} />
           </div>
         </div>
         <div className="flex gap-2 mt-6">
@@ -777,11 +930,19 @@ export const Professors = () => {
               <input type="number" value={esTuition} onChange={(e) => setEsTuition(e.target.value)} className={inp} />
             </div>
             <div>
-              <label className={lbl}>Data de Matrícula</label>
-              <DatePicker value={esEnroll} onChange={setEsEnroll} />
+              <label className={lbl}>Dia de Vencimento</label>
+              <Select
+                value={esDueDay}
+                onValueChange={setEsDueDay}
+                options={Array.from({ length: 31 }, (_, i) => ({ value: (i + 1).toString(), label: `Dia ${i + 1}` }))}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Data de Matrícula</label>
+              <DatePicker value={esEnroll} onChange={setEsEnroll} />
+            </div>
             <div>
               <label className={lbl}>Data de Saída</label>
               <DatePicker value={editStudent?.exitDate || ""} onChange={() => {}} readOnly disabled={esSit === "Ativo"} />
@@ -916,7 +1077,7 @@ export const Professors = () => {
         size="sm"
       >
         {payPopover && (() => {
-          const ds = getDisplayStatus(payPopover.payment, payPopover.month);
+          const ds = getDisplayStatus(payPopover.student, payPopover.month);
           const statusBadge = {
             PAID: { label: "Pago", cls: "bg-accent-green/10 text-accent-green" },
             PENDING: { label: "Pendente", cls: "bg-accent-amber/10 text-accent-amber" },
@@ -943,7 +1104,7 @@ export const Professors = () => {
               <div className="flex flex-col gap-2 mt-4">
                 {ds !== "PAID" && ds !== "WAIVED" && (
                   <button
-                    onClick={() => { handleConfirmPayment(payPopover.profId, payPopover.studentId, payPopover.month, Number(payAmount) || payPopover.tuition); setPayPopover(null); }}
+                    onClick={() => { handleConfirmPayment(payPopover.profId, payPopover.student.id, payPopover.month, Number(payAmount) || payPopover.tuition); setPayPopover(null); }}
                     className="w-full py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
                   >
                     Confirmar Pagamento
@@ -951,7 +1112,7 @@ export const Professors = () => {
                 )}
                 {ds !== "WAIVED" && (
                   <button
-                    onClick={() => { handleWaivePayment(payPopover.profId, payPopover.studentId, payPopover.month); setPayPopover(null); }}
+                    onClick={() => { handleWaivePayment(payPopover.profId, payPopover.student.id, payPopover.month); setPayPopover(null); }}
                     className="w-full py-2.5 rounded-lg bg-surface-tertiary text-text-primary text-xs font-medium hover:bg-surface-tertiary/80 transition-colors border border-border-secondary cursor-pointer"
                   >
                     Isentar Mensalidade
@@ -959,7 +1120,7 @@ export const Professors = () => {
                 )}
                 {(ds === "PAID" || ds === "WAIVED") && (
                   <button
-                    onClick={() => { handleRevertPayment(payPopover.profId, payPopover.studentId, payPopover.month); setPayPopover(null); }}
+                    onClick={() => { handleRevertPayment(payPopover.profId, payPopover.student.id, payPopover.month, payPopover.tuition); setPayPopover(null); }}
                     className="w-full py-2.5 rounded-lg bg-accent-amber/10 text-accent-amber text-xs font-medium hover:bg-accent-amber/20 transition-colors border border-border-secondary cursor-pointer"
                   >
                     Reverter para Pendente

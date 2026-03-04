@@ -68,16 +68,39 @@ export const Dashboard = () => {
   const delinquentCount = (() => {
     const seen = new Set<string>();
     let count = 0;
+    const now = new Date();
+    const currentActualMonth = now.getMonth();
+    const currentActualDay = now.getDate();
+    const currentActualYear = now.getFullYear();
+    const selectedYear = data.config.year;
+
     data.professors.forEach((p) => {
       p.students.forEach((s) => {
         if (s.situation !== "Ativo") return;
         const key = s.personId || s.id;
         if (seen.has(key)) return;
         seen.add(key);
+        
+        const due = s.dueDay ?? 5;
+        let isDelinquent = false;
+
         for (let m = 0; m <= curMo; m++) {
           const pm = s.payments[m];
-          if (!pm || pm.status === "PENDING") { count++; break; }
+          if (!pm || pm.status === "PENDING") {
+            if (selectedYear < currentActualYear) {
+              isDelinquent = true; break;
+            } else if (selectedYear === currentActualYear) {
+              if (m < currentActualMonth) {
+                isDelinquent = true; break;
+              } else if (m === currentActualMonth) {
+                if (currentActualDay > due) {
+                  isDelinquent = true; break;
+                }
+              }
+            }
+          }
         }
+        if (isDelinquent) count++;
       });
     });
     return count;
@@ -91,9 +114,9 @@ export const Dashboard = () => {
   const ccT = (data.expenses || []).map((cc) => {
     let t = 0;
     if (cc.id === "cc1" || cc.name === "Professores") {
-      md.forEach((d) => (t += d.profPayroll));
+      t += cur.profPayroll;
     }
-    (cc.items || []).forEach((it) => (it.amounts || []).forEach((a) => (t += a || 0)));
+    (cc.items || []).forEach((it) => { t += (it.amounts?.[curMo] || 0) });
     return { name: cc.name, total: t, fill: cc.color };
   });
 
@@ -154,36 +177,6 @@ export const Dashboard = () => {
       ) : (
         <CourseBreakdown professors={data.professors} currentMonth={curMo} />
       )}
-
-      {/* Seção ACUMULADO ANUAL — Card compacto */}
-      <div className="rounded-xl p-4 border border-border-primary bg-surface-tertiary">
-        <div className="flex items-center gap-2 mb-3">
-          <Calendar size={14} className="text-text-tertiary" />
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-            Acumulado Anual
-          </p>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs text-text-secondary mb-1">Receita</p>
-            <p className="text-lg font-mono font-medium text-accent-green">{brl(tR)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-secondary mb-1">Despesas</p>
-            <p className="text-lg font-mono font-medium text-accent-red">{brl(tE)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-secondary mb-1">Resultado</p>
-            <p className={cn("text-lg font-mono font-medium", tProfit >= 0 ? "text-accent-green" : "text-accent-red")}>
-              {brl(tProfit)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-text-secondary mb-1">Margem</p>
-            <p className="text-lg font-mono font-medium text-text-primary">{pct(tMargin)}</p>
-          </div>
-        </div>
-      </div>
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

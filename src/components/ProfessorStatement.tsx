@@ -1,7 +1,7 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo } from "react";
 import type { Professor } from "../types";
 import { brl, MF, cn } from "../lib/utils";
-import { Copy, Check, FileText, X } from "lucide-react";
+import { Copy, Check, FileText } from "lucide-react";
 
 interface Props {
   professor: Professor;
@@ -13,7 +13,6 @@ interface Props {
 
 export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, schoolName, onClose }) => {
   const [copied, setCopied] = React.useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   const statement = useMemo(() => {
     const rows = professor.students
@@ -30,16 +29,18 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
           paid,
           cost,
           status: pm?.status || "PENDING",
+          isActive: s.situation === "Ativo",
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const totalExpected = rows.reduce((s, r) => s + r.expected, 0);
     const totalPaid = rows.reduce((s, r) => s + r.paid, 0);
-    const totalCost = rows.filter((r) => r.paid > 0).length * professor.costPerStudent;
+    const activeCount = rows.filter((r) => r.isActive).length;
+    const totalCost = activeCount * professor.costPerStudent;
     const paidCount = rows.filter((r) => r.paid > 0).length;
 
-    return { rows, totalExpected, totalPaid, totalCost, paidCount };
+    return { rows, totalExpected, totalPaid, totalCost, paidCount, activeCount };
   }, [professor, month]);
 
   const whatsappText = useMemo(() => {
@@ -50,14 +51,14 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
     lines.push("```");
     statement.rows.forEach((r) => {
       const status = r.status === "PAID" ? "OK" : r.status === "WAIVED" ? "IS" : "—";
-      lines.push(`${r.name.padEnd(20)} ${status}  ${brl(r.paid).padStart(10)}`);
+      lines.push(`${r.name.padEnd(20)} ${status}  ${brl(r.paid > 0 ? r.paid : r.expected).padStart(10)}`);
     });
     lines.push("```");
     lines.push("");
-    lines.push(`Alunos pagantes: *${statement.paidCount}*/${statement.rows.length}`);
-    lines.push(`Receita: *${brl(statement.totalPaid)}*`);
-    lines.push(`Sua folha: *${brl(statement.totalCost)}*`);
-    lines.push(`Custo/aluno: ${brl(professor.costPerStudent)}`);
+    lines.push(`Alunos: *${statement.activeCount}* | Pagantes: *${statement.paidCount}*`);
+    lines.push(`Previsto: *${brl(statement.totalExpected)}*`);
+    lines.push(`Recebido: *${brl(statement.totalPaid)}*`);
+    lines.push(`Sua folha: *${brl(statement.totalCost)}* (${brl(professor.costPerStudent)}/aluno x ${statement.activeCount})`);
     return lines.join("\n");
   }, [professor, month, year, schoolName, statement]);
 
@@ -79,23 +80,17 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
             </p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all border-none bg-transparent cursor-pointer"
-        >
-          <X size={16} />
-        </button>
       </div>
 
-      <div ref={ref} className="rounded-xl border border-border-primary overflow-hidden">
+      <div className="rounded-xl border border-border-primary overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-surface-tertiary">
               <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-3">Aluno</th>
               <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2">Curso</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Previsto</th>
+              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Mensalidade</th>
               <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Pago</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Custo</th>
+              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Custo Prof.</th>
               <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-center">Status</th>
             </tr>
           </thead>
@@ -109,7 +104,7 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
                   {r.paid > 0 ? brl(r.paid) : "—"}
                 </td>
                 <td className="py-2 px-2 text-[11px] font-mono text-accent-red text-right">
-                  {r.paid > 0 ? brl(r.cost) : "—"}
+                  {brl(r.cost)}
                 </td>
                 <td className="py-2 px-2 text-center">
                   <span className={cn(
@@ -129,22 +124,21 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
         <div className="border-t border-border-primary bg-surface-tertiary px-3 py-3">
           <div className="grid grid-cols-4 gap-4">
             <div>
-              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Pagantes</p>
-              <p className="text-sm font-mono font-bold text-text-primary">{statement.paidCount}/{statement.rows.length}</p>
+              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Alunos</p>
+              <p className="text-sm font-mono font-bold text-text-primary">{statement.activeCount} <span className="text-[10px] font-normal text-text-tertiary">({statement.paidCount} pag.)</span></p>
             </div>
             <div>
-              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Receita</p>
+              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Previsto</p>
+              <p className="text-sm font-mono font-bold text-text-secondary">{brl(statement.totalExpected)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Recebido</p>
               <p className="text-sm font-mono font-bold text-accent-green">{brl(statement.totalPaid)}</p>
             </div>
             <div>
-              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Folha</p>
+              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Folha Prof.</p>
               <p className="text-sm font-mono font-bold text-accent-red">{brl(statement.totalCost)}</p>
-            </div>
-            <div>
-              <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">% Folha/Receita</p>
-              <p className={cn("text-sm font-mono font-bold", statement.totalPaid > 0 && statement.totalCost / statement.totalPaid > 0.45 ? "text-accent-red" : "text-text-primary")}>
-                {statement.totalPaid > 0 ? ((statement.totalCost / statement.totalPaid) * 100).toFixed(1) + "%" : "—"}
-              </p>
+              <p className="text-[9px] text-text-tertiary">{brl(professor.costPerStudent)}/al. x {statement.activeCount}</p>
             </div>
           </div>
         </div>

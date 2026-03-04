@@ -27,6 +27,7 @@ export interface Student {
   phone?: string;
   responsibleName?: string;
   responsiblePhone?: string;
+  dueDay?: number;
 }
 
 export interface Professor {

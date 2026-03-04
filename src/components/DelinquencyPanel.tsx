@@ -24,6 +24,11 @@ export const DelinquencyPanel: React.FC<Props> = ({ professors, currentMonth, ye
     const result: DelinquentStudent[] = [];
     const seen = new Set<string>();
 
+    const now = new Date();
+    const currentActualMonth = now.getMonth();
+    const currentActualDay = now.getDate();
+    const currentActualYear = now.getFullYear();
+
     professors.forEach((p) => {
       p.students.forEach((s) => {
         if (s.situation !== "Ativo") return;
@@ -33,11 +38,28 @@ export const DelinquencyPanel: React.FC<Props> = ({ professors, currentMonth, ye
 
         const lateMonths: number[] = [];
         let totalOwed = 0;
+        const due = s.dueDay ?? 5;
+
         for (let m = 0; m <= currentMonth; m++) {
           const pm = s.payments[m];
           if (!pm || pm.status === "PENDING") {
-            lateMonths.push(m);
-            totalOwed += s.tuitionAmount || 0;
+            let isLate = false;
+            if (year < currentActualYear) {
+              isLate = true;
+            } else if (year === currentActualYear) {
+              if (m < currentActualMonth) {
+                isLate = true;
+              } else if (m === currentActualMonth) {
+                if (currentActualDay > due) {
+                  isLate = true;
+                }
+              }
+            }
+
+            if (isLate) {
+              lateMonths.push(m);
+              totalOwed += s.tuitionAmount || 0;
+            }
           }
         }
         if (lateMonths.length > 0) {

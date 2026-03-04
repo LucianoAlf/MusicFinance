@@ -38,7 +38,7 @@ export const Sidebar = () => {
         )}
       >
         <div className="flex items-center justify-center flex-shrink-0">
-          <img src="/Avatar_Porquinho.png" alt="Logo" className="w-7 h-7" />
+          <img src="/porquinho.png" alt="Logo" className="w-7 h-7" />
         </div>
         {!sideCol && (
           <span className="font-logo text-[18px] font-extrabold tracking-tighter text-text-primary">

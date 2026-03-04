@@ -42,7 +42,7 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
       <div className="w-full max-md">
         <div className="text-center mb-8 flex flex-col items-center">
           <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
-            <img src="/Avatar_Porquinho.png" alt="Logo" className="w-full h-full object-contain" />
+            <img src="/porquinho.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tighter text-text-primary font-logo">
             {isFirstSchool ? "Crie sua primeira escola" : "Nova escola"}

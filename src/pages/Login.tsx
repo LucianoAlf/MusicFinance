@@ -27,7 +27,7 @@ export const Login: React.FC<Props> = ({ onGoToSignup }) => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8 flex flex-col items-center">
           <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
-            <img src="/Avatar_Porquinho.png" alt="Logo" className="w-full h-full object-contain" />
+            <img src="/porquinho.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tighter text-text-primary font-logo">MusicFinance</h1>
           <p className="text-text-secondary mt-1 text-sm">Dashboard Financeiro para Escolas de Musica</p>

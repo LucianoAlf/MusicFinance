@@ -8,6 +8,7 @@ import { AvatarUploader } from "../components/ui/AvatarUploader";
 import { uploadProfessorAvatar, deleteProfessorAvatar } from "../lib/supabaseData";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
 import type { Student, Instrument, Payment, DisplayStatus } from "../types";
+import { ProfessorStatement } from "../components/ProfessorStatement";
 import {
   Users,
   GraduationCap,
@@ -29,6 +30,7 @@ import {
   Calendar,
   ArrowUpRight,
   ArrowDownRight,
+  FileText,
 } from "lucide-react";
 
 const SITUATIONS = ["Ativo", "Evadido", "Trancado"] as const;
@@ -106,6 +108,7 @@ export const Professors = () => {
   const [showAddStud, setShowAddStud] = useState<string | null>(null);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [editProf, setEditProf] = useState<string | null>(null);
+  const [showStatement, setShowStatement] = useState(false);
 
   // Add professor form
   const [npName, setNpName] = useState("");
@@ -133,6 +136,9 @@ export const Professors = () => {
   const [esEnroll, setEsEnroll] = useState("");
   const [esTuition, setEsTuition] = useState("");
   const [esInstId, setEsInstId] = useState("");
+  const [esPhone, setEsPhone] = useState("");
+  const [esRespName, setEsRespName] = useState("");
+  const [esRespPhone, setEsRespPhone] = useState("");
 
   // Edit professor modal state
   const [epName, setEpName] = useState("");
@@ -243,6 +249,9 @@ export const Professors = () => {
     setEsEnroll(s.enrollmentDate || "");
     setEsTuition(s.tuitionAmount?.toString() || data.config.tuition.toString());
     setEsInstId(s.instrumentId || "");
+    setEsPhone(s.phone || "");
+    setEsRespName(s.responsibleName || "");
+    setEsRespPhone(s.responsiblePhone || "");
   };
 
   const saveEditStudent = async () => {
@@ -255,6 +264,9 @@ export const Professors = () => {
       enrollmentDate: esEnroll || undefined,
       tuitionAmount: esTuition ? Number(esTuition) : undefined,
       instrumentId: esInstId || undefined,
+      phone: esPhone,
+      responsibleName: esRespName,
+      responsiblePhone: esRespPhone,
     });
     setEditStudent(null);
   };
@@ -425,6 +437,9 @@ export const Professors = () => {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={() => setShowStatement(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-tertiary text-text-secondary text-[11px] font-medium hover:text-text-primary hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer">
+                    <FileText size={14} /> Extrato
+                  </button>
                   <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-[11px] font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">
                     <UserPlus size={14} /> Novo Aluno
                   </button>
@@ -772,6 +787,23 @@ export const Professors = () => {
               <DatePicker value={editStudent?.exitDate || ""} onChange={() => {}} readOnly disabled={esSit === "Ativo"} />
             </div>
           </div>
+          <div className="border-t border-border-primary pt-4">
+            <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-3">Contato</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Telefone do Aluno</label>
+                <input value={esPhone} onChange={(e) => setEsPhone(e.target.value)} className={inp} placeholder="(11) 99999-0000" />
+              </div>
+              <div>
+                <label className={lbl}>Nome do Responsável</label>
+                <input value={esRespName} onChange={(e) => setEsRespName(e.target.value)} className={inp} placeholder="Ex: Maria Silva" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className={lbl}>Telefone do Responsável</label>
+              <input value={esRespPhone} onChange={(e) => setEsRespPhone(e.target.value)} className={inp} placeholder="(11) 99999-0000" />
+            </div>
+          </div>
           <div className="rounded-lg p-3 border border-border-secondary bg-surface-tertiary">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Tempo de Permanência</span>
@@ -943,6 +975,24 @@ export const Professors = () => {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* Statement Modal */}
+      <Modal
+        open={showStatement && !!prof}
+        onOpenChange={(v) => { if (!v) setShowStatement(false); }}
+        title="Extrato do Professor"
+        size="lg"
+      >
+        {prof && (
+          <ProfessorStatement
+            professor={prof}
+            month={curMo}
+            year={data.config.year}
+            schoolName={data.config.schoolName}
+            onClose={() => setShowStatement(false)}
+          />
+        )}
       </Modal>
 
       {/* Confirm Modal */}

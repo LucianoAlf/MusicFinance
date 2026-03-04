@@ -24,6 +24,9 @@ export interface Student {
   tuitionAmount?: number;
   instrumentId?: string;
   instrumentName?: string;
+  phone?: string;
+  responsibleName?: string;
+  responsiblePhone?: string;
 }
 
 export interface Professor {

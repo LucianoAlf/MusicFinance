@@ -62,7 +62,7 @@ interface DataContextType {
   handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
   handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string }) => Promise<void>;
-  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) => Promise<void>;
+  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument | null>;
   handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
@@ -186,13 +186,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const calcMo = (m: number) => {
     if (!data) return null;
-    let tui = 0, pp = 0;
+    let tui = 0, pp = 0, expectedTui = 0;
     const paidPersonIds = new Set<string>();
     const activePersonIds = new Set<string>();
     (data.professors || []).forEach((p) => {
       let pay = 0;
       (p.students || []).forEach((s) => {
-        if (s.situation === "Ativo") activePersonIds.add(s.personId || s.id);
+        if (s.situation === "Ativo") {
+          activePersonIds.add(s.personId || s.id);
+          expectedTui += s.tuitionAmount || 0;
+        }
         const pm = s.payments && s.payments[m];
         if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; pay++; paidPersonIds.add(s.personId || s.id); }
       });
@@ -203,11 +206,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const rv = data.revenue || [];
     const extraRev = rv.reduce((sum, rc) => sum + (rc.amounts?.[m] || 0), 0);
     const rev = tui + extraRev;
+    const expectedRevenue = expectedTui + extraRev;
     let exp = pp, fc = 0, vc = pp;
     (data.expenses || []).forEach((cc) =>
       (cc.items || []).forEach((it) => { const a = it.amounts?.[m] || 0; exp += a; if (it.type === "F") fc += a; else vc += a; })
     );
-    return { month: MS[m], revenue: rev, expenses: exp, profit: rev - exp, margin: rev > 0 ? (rev - exp) / rev : 0, tuition: tui, payingStudents: ps, activeStudents: activeCount, profPayroll: pp, ticket: ps > 0 ? tui / ps : 0, fixedCost: fc, varCost: vc, costPerStudent: activeCount > 0 ? exp / activeCount : 0 };
+    return { month: MS[m], revenue: rev, expectedRevenue, expenses: exp, profit: rev - exp, margin: rev > 0 ? (rev - exp) / rev : 0, tuition: tui, payingStudents: ps, activeStudents: activeCount, profPayroll: pp, ticket: ps > 0 ? tui / ps : 0, fixedCost: fc, varCost: vc, costPerStudent: activeCount > 0 ? exp / activeCount : 0 };
   };
 
   // ─── Write handlers ────────────────────────────────────────────────────
@@ -276,7 +280,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string }) => {
+  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateStudent(studentId, updates);
@@ -298,6 +302,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             tuitionAmount: row.tuition_amount ? Number(row.tuition_amount) : s.tuitionAmount,
             instrumentId: row.instrument_id || s.instrumentId,
             instrumentName: row.instrument_id ? instruments.find(i => i.id === row.instrument_id)?.name : s.instrumentName,
+            phone: row.phone || undefined,
+            responsibleName: row.responsible_name || undefined,
+            responsiblePhone: row.responsible_phone || undefined,
           } : s),
         })),
       };

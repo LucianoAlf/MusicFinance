@@ -199,7 +199,8 @@ export const Financial = () => {
         <MonthSelector curMo={curMo} setCurMo={setCurMo} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <KpiCard label="Previsto" value={brl(calc.expectedRevenue)} sub={calc.expectedRevenue > 0 ? `Realizado: ${pct(calc.revenue / calc.expectedRevenue)}` : undefined} />
         <KpiCard label="Receita" value={brl(calc.revenue)} />
         <KpiCard label="Despesas" value={brl(calc.expenses)} />
         <KpiCard label="Resultado" value={brl(calc.profit)} />

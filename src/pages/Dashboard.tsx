@@ -2,6 +2,8 @@ import React from "react";
 import { useData } from "../context/DataContext";
 import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
+import { DelinquencyPanel } from "../components/DelinquencyPanel";
+import { CourseBreakdown } from "../components/CourseBreakdown";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
 import {
   DollarSign,
@@ -42,6 +44,7 @@ export const Dashboard = () => {
   const md = Array.from({ length: 12 }, (_, i) => calcMo(i));
   const tR = md.reduce((a, d) => a + d.revenue, 0);
   const tE = md.reduce((a, d) => a + d.expenses, 0);
+  const tExpected = md.reduce((a, d) => a + d.expectedRevenue, 0);
   const tProfit = tR - tE;
   const tMargin = tR > 0 ? tProfit / tR : 0;
 
@@ -62,6 +65,24 @@ export const Dashboard = () => {
   const churnRate = kpiMes?.churnRate ?? 0;
   const activeStudents = kpiMes?.activeStudents ?? 0;
   const avgTenure = viewKpis?.avgTenureMonths ?? 0;
+
+  const delinquentCount = (() => {
+    const seen = new Set<string>();
+    let count = 0;
+    data.professors.forEach((p) => {
+      p.students.forEach((s) => {
+        if (s.situation !== "Ativo") return;
+        const key = s.personId || s.id;
+        if (seen.has(key)) return;
+        seen.add(key);
+        for (let m = 0; m <= curMo; m++) {
+          const pm = s.payments[m];
+          if (!pm || pm.status === "PENDING") { count++; break; }
+        }
+      });
+    });
+    return count;
+  })();
   
   // Cálculo do Ponto de Equilíbrio em Alunos
   // PE (Alunos) = Despesas Fixas / (Ticket Médio - Custo Var por Aluno)
@@ -99,9 +120,9 @@ export const Dashboard = () => {
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <KpiCard label="Receita" value={brl(cur.revenue)} trend={trend(cur.revenue, prev?.revenue)} />
+          <KpiCard label="Previsto" value={brl(cur.expectedRevenue)} sub={cur.expectedRevenue > 0 ? `Realizado: ${pct(cur.revenue / cur.expectedRevenue)}` : undefined} />
           <KpiCard label="Despesas" value={brl(cur.expenses)} trend={trend(cur.expenses, prev?.expenses)} invertTrend />
           <KpiCard label="Resultado" value={brl(cur.profit)} trend={trend(cur.profit, prev?.profit)} />
-          <KpiCard label="Margem" value={pct(cur.margin)} />
           <KpiCard label="Ticket Médio" value={brl(cur.ticket)} sub={`Custo ${brl(cur.costPerStudent)}`} />
           <KpiCard label="Ponto de Equilíbrio" value={beAlunos != null ? `${beAlunos} alunos` : "—"} sub={beAlunos != null ? `Margem/al: ${brl(marginPerStudent)}` : undefined} />
         </div>
@@ -114,14 +135,21 @@ export const Dashboard = () => {
         <p className="text-[10px] font-semibold mb-3 uppercase tracking-wider text-text-secondary">
           Alunos — {MF[curMo]}
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <KpiCard label="Ativos" value={activeStudents} />
           <KpiCard label="Pagantes" value={cur.payingStudents} sub={`${data.professors.length} profs`} />
+          <KpiCard label="Inadimplentes" value={delinquentCount} sub={delinquentCount > 0 && activeStudents > 0 ? `${((delinquentCount / activeStudents) * 100).toFixed(0)}% da base` : undefined} />
           <KpiCard label="Matrículas" value={newEnrollments} trend={trend(newEnrollments, kpiPrev?.newEnrollments ?? null)} />
           <KpiCard label="Evasões" value={churnedStudents} trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
           <KpiCard label="Churn Rate" value={churnRate.toFixed(1) + "%"} trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
           <KpiCard label="Permanência" value={avgTenure.toFixed(1) + " m"} />
         </div>
+      </div>
+
+      {/* Inadimplência + Rentabilidade por Curso */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DelinquencyPanel professors={data.professors} currentMonth={curMo} year={data.config.year} />
+        <CourseBreakdown professors={data.professors} currentMonth={curMo} />
       </div>
 
       {/* Seção ACUMULADO ANUAL — Card compacto */}
@@ -132,7 +160,11 @@ export const Dashboard = () => {
             Acumulado Anual
           </p>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div>
+            <p className="text-xs text-text-secondary mb-1">Previsto</p>
+            <p className="text-lg font-mono font-medium text-text-secondary">{brl(tExpected)}</p>
+          </div>
           <div>
             <p className="text-xs text-text-secondary mb-1">Receita</p>
             <p className="text-lg font-mono font-medium text-accent-green">{brl(tR)}</p>
@@ -172,6 +204,7 @@ export const Dashboard = () => {
                 />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", color: "var(--color-text-secondary)" }} />
                 <ReferenceLine x={MS[curMo]} stroke="var(--color-text-tertiary)" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="expectedRevenue" name="Previsto" stroke="var(--color-text-tertiary)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
                 <Line type="monotone" dataKey="revenue" name="Receita" stroke="var(--color-accent-green)" strokeWidth={2} activeDot={{ r: 5 }} />
                 <Line type="monotone" dataKey="expenses" name="Despesas" stroke="var(--color-accent-red)" strokeWidth={2} activeDot={{ r: 5 }} />
                 <Line type="monotone" dataKey="profit" name="Resultado" stroke="var(--color-accent-blue)" strokeWidth={2} activeDot={{ r: 5 }} />
@@ -281,6 +314,7 @@ export const Dashboard = () => {
             </thead>
             <tbody>
               {[
+                { l: "Previsto", k: "expectedRevenue", f: brl },
                 { l: "Receita", k: "revenue", f: brl },
                 { l: "Despesas", k: "expenses", f: brl },
                 { l: "Resultado", k: "profit", f: brl },

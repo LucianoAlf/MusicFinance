@@ -31,9 +31,9 @@ export const Login: React.FC = () => {
       {/* Hero Panel (Left) */}
       <div className="hidden lg:flex lg:w-[60%] relative overflow-hidden bg-[#0a0e14]">
         <img
-          src="/gabi.png"
+          src="/luciano.png"
           alt="MusicFinance"
-          className="absolute inset-0 w-full h-full object-cover opacity-40"
+          className="absolute inset-0 w-full h-full object-cover object-[35%_top] opacity-40"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e14] via-[#0a0e14]/70 to-transparent" />
 

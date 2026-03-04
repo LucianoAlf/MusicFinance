@@ -62,7 +62,11 @@ export const Dashboard = () => {
   const churnRate = kpiMes?.churnRate ?? 0;
   const activeStudents = kpiMes?.activeStudents ?? 0;
   const avgTenure = viewKpis?.avgTenureMonths ?? 0;
-  const breakevenRevenue = beMes?.breakevenRevenue;
+  
+  // Cálculo do Ponto de Equilíbrio em Alunos
+  // PE (Alunos) = Despesas Fixas / (Ticket Médio - Custo Var por Aluno)
+  const marginPerStudent = cur.ticket - cur.costPerStudent;
+  const beAlunos = marginPerStudent > 0 ? Math.ceil(cur.fixedCost / marginPerStudent) : null;
 
   const ccT = (data.expenses || []).map((cc) => {
     let t = 0;
@@ -99,7 +103,7 @@ export const Dashboard = () => {
           <KpiCard label="Resultado" value={brl(cur.profit)} trend={trend(cur.profit, prev?.profit)} />
           <KpiCard label="Margem" value={pct(cur.margin)} />
           <KpiCard label="Ticket Médio" value={brl(cur.ticket)} sub={`Custo ${brl(cur.costPerStudent)}`} />
-          <KpiCard label="Ponto de Equilíbrio" value={breakevenRevenue != null ? brl(breakevenRevenue) : "—"} />
+          <KpiCard label="Ponto de Equilíbrio" value={beAlunos != null ? `${beAlunos} alunos` : "—"} sub={beAlunos != null ? `Margem/al: ${brl(marginPerStudent)}` : undefined} />
         </div>
       </div>
 

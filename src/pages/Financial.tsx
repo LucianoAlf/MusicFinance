@@ -208,19 +208,23 @@ export const Financial = () => {
       </div>
 
       {(() => {
-        const beMes = viewKpis?.breakeven?.find((b) => b.month === curMo + 1);
-        if (!beMes?.breakevenRevenue || !calc) return null;
-        const pctBe = Math.min(calc.revenue / beMes.breakevenRevenue, 1.5);
-        const above = calc.revenue >= beMes.breakevenRevenue;
-        const diff = Math.abs(calc.revenue - beMes.breakevenRevenue);
+        // PE (Alunos) = Despesas Fixas / (Ticket Médio - Custo Var por Aluno)
+        const marginPerStudent = calc.ticket - calc.costPerStudent;
+        const beAlunos = marginPerStudent > 0 ? Math.ceil(calc.fixedCost / marginPerStudent) : null;
+        if (beAlunos === null || !calc) return null;
+
+        const pctBe = Math.min(calc.payingStudents / beAlunos, 1.5);
+        const above = calc.payingStudents >= beAlunos;
+        const diff = Math.abs(calc.payingStudents - beAlunos);
+
         return (
           <div className="rounded-xl p-4 shadow-sm border bg-surface-tertiary border-border-primary">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">
-                Ponto de Equilíbrio
+                Ponto de Equilíbrio (Alunos)
               </span>
               <span className={cn("text-[11px] font-mono font-medium", above ? "text-accent-green" : "text-accent-red")}>
-                {above ? `Acima em ${brl(diff)}` : `Faltam ${brl(diff)}`}
+                {above ? `Meta atingida (+${diff})` : `Faltam ${diff} alunos`}
               </span>
             </div>
             <div className="w-full h-2 rounded-full bg-surface-secondary overflow-hidden">
@@ -231,10 +235,10 @@ export const Financial = () => {
             </div>
             <div className="flex justify-between mt-2">
               <span className="text-[10px] font-mono text-text-secondary">
-                Receita: {brl(calc.revenue)}
+                Pagantes: {calc.payingStudents}
               </span>
               <span className="text-[10px] font-mono text-text-secondary">
-                PE: {brl(beMes.breakevenRevenue)}
+                Meta PE: {beAlunos} alunos
               </span>
             </div>
           </div>

@@ -46,7 +46,7 @@ export const Dre = () => {
           .filter(it => it.type === 'V')
           .reduce((s, it) => s + (it.amounts?.[i] || 0), 0);
       }, 0);
-    const totalVariable = folhaProf + varExpenses;
+    const totalVariable = varExpenses;
 
     const contributionMargin = netRevenue - totalVariable;
 
@@ -60,7 +60,7 @@ export const Dre = () => {
         const centerTotal = centerItems.reduce((s, it) => s + it.amount, 0);
         return { name: cc.name, total: centerTotal, items: centerItems };
       });
-    const totalFixed = fixedBreakdown.reduce((s, cc) => s + cc.total, 0);
+    const totalFixed = fixedBreakdown.reduce((s, cc) => s + cc.total, 0) + folhaProf;
 
     const result = contributionMargin - totalFixed;
 
@@ -187,7 +187,6 @@ export const Dre = () => {
               {renderRow("RECEITA LÍQUIDA", m => m.netRevenue, { isSubtotal: true })}
 
               {renderRow("CUSTOS VARIÁVEIS", m => m.totalVariable, { isSubtotal: true, isNegative: true })}
-              {renderRow("Folha Professores (auto)", m => m.folhaProf, { indent: 1 })}
               {/* Extra variable items if any */}
               {(() => {
                 const varItems = data.expenses
@@ -203,6 +202,7 @@ export const Dre = () => {
               {renderRow("MARGEM DE CONTRIBUIÇÃO", m => m.contributionMargin, { isSubtotal: true })}
 
               {renderRow("DESPESAS FIXAS", m => m.totalFixed, { isSubtotal: true, isNegative: true })}
+              {renderRow("Folha Professores (auto)", m => m.folhaProf, { indent: 1 })}
               {data.expenses
                 .filter(cc => cc.name !== "Impostos")
                 .map((cc, ci) => (

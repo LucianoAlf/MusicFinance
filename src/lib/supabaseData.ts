@@ -24,7 +24,7 @@ interface DbExpenseItem { id: string; cost_center_id: string; name: string; expe
 interface DbExpense { id: string; expense_item_id: string; year: number; month: number; amount: number; }
 interface DbRevenueCategory { id: string; name: string; slug: string; sort_order: number; }
 interface DbRevenue { id: string; category_id: string; year: number; month: number; amount: number; }
-interface DbBill { id: string; expense_item_id: string | null; description: string; bill_type: string; amount: number; paid_amount: number | null; due_date: string; paid_at: string | null; total_installments: number | null; current_installment: number | null; status: string; group_id: string | null; }
+interface DbBill { id: string; expense_item_id: string | null; description: string; bill_type: string; amount: number; paid_amount: number | null; due_date: string; paid_at: string | null; total_installments: number | null; current_installment: number | null; status: string; group_id: string | null; competence_month: number | null; competence_year: number | null; }
 interface DbSchool { id: string; name: string; year: number; default_tuition: number; passport_fee: number; }
 
 // ─── Slug map for revenue categories ───────────────────────────────────────
@@ -56,7 +56,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     supabase.from("expenses").select("id, expense_item_id, year, month, amount").eq("school_id", schoolId),
     supabase.from("revenue_categories").select("id, name, slug, sort_order").eq("school_id", schoolId).order("sort_order"),
     supabase.from("revenues").select("id, category_id, year, month, amount").eq("school_id", schoolId),
-    supabase.from("bills").select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id").eq("school_id", schoolId).order("due_date"),
+    supabase.from("bills").select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id, competence_month, competence_year").eq("school_id", schoolId).order("due_date"),
     supabase.from("instruments").select("id, name").eq("school_id", schoolId).order("name"),
     supabase.from("professor_instruments").select("professor_id, instrument_id, instruments(id, name)"),
   ]);
@@ -170,7 +170,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     description: b.description,
     costCenterId: b.expense_item_id ? (eiMap.get(b.expense_item_id) || "") : "",
     expenseItemId: b.expense_item_id || "",
-    type: b.bill_type as PayableBill["type"],
+    type: (b.bill_type === "RECURRENT_FIXED" || b.bill_type === "RECURRENT_VARIABLE" ? "RECURRENT" : b.bill_type) as PayableBill["type"],
     amount: Number(b.amount),
     paidAmount: b.paid_amount != null ? Number(b.paid_amount) : undefined,
     dueDate: b.due_date,
@@ -179,6 +179,8 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     currentInstallment: b.current_installment || undefined,
     status: b.status as "PENDING" | "PAID",
     groupId: b.group_id || undefined,
+    competenceMonth: b.competence_month ?? undefined,
+    competenceYear: b.competence_year ?? undefined,
   }));
 
   return {
@@ -381,7 +383,8 @@ export async function upsertRevenue(data: { schoolId: string; categoryId: string
 export async function createBills(schoolId: string, bills: Array<{
   description: string; expenseItemId: string; billType: string; amount: number;
   dueDate: string; totalInstallments?: number; currentInstallment?: number;
-  status?: string; groupId?: string;
+  status?: string; groupId?: string; paidAmount?: number; paidAt?: string;
+  competenceMonth?: number; competenceYear?: number;
 }>) {
   const rows = bills.map((b) => ({
     school_id: schoolId,
@@ -394,8 +397,12 @@ export async function createBills(schoolId: string, bills: Array<{
     current_installment: b.currentInstallment || null,
     status: b.status || "PENDING",
     group_id: b.groupId || null,
+    paid_amount: b.paidAmount ?? null,
+    paid_at: b.paidAt ?? null,
+    competence_month: b.competenceMonth ?? null,
+    competence_year: b.competenceYear ?? null,
   }));
-  return supabase.from("bills").insert(rows).select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id");
+  return supabase.from("bills").insert(rows).select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id, competence_month, competence_year");
 }
 
 export async function updateBill(billId: string, data: { amount?: number; dueDate?: string; status?: string; paidAmount?: number; paidAt?: string }) {
@@ -410,6 +417,56 @@ export async function updateBill(billId: string, data: { amount?: number; dueDat
 
 export async function deleteBills(billIds: string[]) {
   return supabase.from("bills").delete().in("id", billIds);
+}
+
+export async function getRecurrentBillsForYear(schoolId: string, year: number) {
+  return supabase
+    .from("bills")
+    .select("id, expense_item_id, description, bill_type, amount, group_id, competence_month, competence_year")
+    .eq("school_id", schoolId)
+    .eq("bill_type", "RECURRENT")
+    .gte("due_date", `${year}-01-01`)
+    .lte("due_date", `${year}-12-31`);
+}
+
+export async function replicateRecurrentBills(schoolId: string, fromYear: number, toYear: number) {
+  const { data: existing } = await getRecurrentBillsForYear(schoolId, fromYear);
+  if (!existing || existing.length === 0) return { created: 0 };
+
+  const { data: alreadyInTarget } = await getRecurrentBillsForYear(schoolId, toYear);
+  if (alreadyInTarget && alreadyInTarget.length > 0) return { created: 0, skipped: true };
+
+  const groupMap = new Map<string, typeof existing>();
+  for (const bill of existing) {
+    const key = bill.group_id || bill.id;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(bill);
+  }
+
+  const rows: any[] = [];
+  for (const [, bills] of groupMap) {
+    const template = bills[0];
+    const newGroupId = crypto.randomUUID();
+    for (let m = 0; m < 12; m++) {
+      const day = "15";
+      rows.push({
+        school_id: schoolId,
+        expense_item_id: template.expense_item_id,
+        description: template.description,
+        bill_type: "RECURRENT",
+        amount: template.amount,
+        due_date: `${toYear}-${String(m + 1).padStart(2, "0")}-${day}`,
+        status: "PENDING",
+        group_id: newGroupId,
+        competence_month: m,
+        competence_year: toYear,
+      });
+    }
+  }
+
+  if (rows.length === 0) return { created: 0 };
+  const { error } = await supabase.from("bills").insert(rows);
+  return { created: rows.length, error };
 }
 
 // ─── WRITES: Instruments ────────────────────────────────────────────────────

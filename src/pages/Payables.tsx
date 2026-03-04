@@ -10,10 +10,8 @@ import {
   Circle,
   Receipt,
   Repeat,
-  Zap,
   CreditCard,
   Calendar as CalendarIcon,
-  X,
 } from "lucide-react";
 import { PayableBill } from "../types";
 
@@ -29,8 +27,12 @@ export const Payables = () => {
   const [dueDate, setDueDate] = useState("");
   const [ccId, setCcId] = useState("");
   const [eiId, setEiId] = useState("");
-  const [type, setType] = useState<"UNIQUE" | "RECURRENT_FIXED" | "RECURRENT_VARIABLE" | "INSTALLMENT">("UNIQUE");
+  const [type, setType] = useState<"UNIQUE" | "RECURRENT" | "INSTALLMENT">("UNIQUE");
   const [installments, setInstallments] = useState("2");
+  const [billStatus, setBillStatus] = useState<"PENDING" | "PAID">("PENDING");
+  const [paidAt, setPaidAt] = useState("");
+  const [competenceMonth, setCompetenceMonth] = useState<string>(String(curMo));
+  const [competenceYear, setCompetenceYear] = useState<string>("");
 
   const [isNewCc, setIsNewCc] = useState(false);
   const [newCcName, setNewCcName] = useState("");
@@ -58,11 +60,12 @@ export const Payables = () => {
   const totalPaid = curMonthBills.filter((b) => b.status === "PAID").reduce((acc, b) => acc + b.amount, 0);
   const totalPending = totalMonth - totalPaid;
 
-  // Build select options for categories and expense items
   const ccOptions = data.expenses.map((cc) => ({ value: cc.id, label: cc.name }));
   const eiOptions = ccId
     ? (data.expenses.find((c) => c.id === ccId)?.items.map((ei) => ({ value: ei.id, label: ei.name })) || [])
     : [];
+
+  const monthOptions = MF.map((m, i) => ({ value: String(i), label: m }));
 
   const handleSaveBill = async () => {
     if (!desc.trim() || !amount || !dueDate) return;
@@ -79,34 +82,42 @@ export const Payables = () => {
     }
 
     if (isNewEi) {
-      const eiType = type === "RECURRENT_VARIABLE" ? "V" as const : "F" as const;
-      finalEiId = await handleAddExpenseItem(finalCcId, { name: newEiName.trim(), type: eiType });
+      finalEiId = await handleAddExpenseItem(finalCcId, { name: newEiName.trim(), type: "F" as const });
       if (!finalEiId) return;
     }
 
     const baseDate = new Date(dueDate + "T12:00:00");
     const startMonth = baseDate.getMonth();
-    const startYear = baseDate.getFullYear();
 
     const billsToCreate: PayableBill[] = [];
     const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
     const groupId = "grp" + Date.now();
     const baseAmount = Number(amount);
+    const compMo = Number(competenceMonth);
+    const compYr = Number(competenceYear) || data.config.year;
 
     const hasExpenseItem = !!finalEiId;
+
+    const baseBill = {
+      description: desc.trim(),
+      costCenterId: finalCcId,
+      expenseItemId: finalEiId,
+      status: billStatus,
+      paidAmount: billStatus === "PAID" ? baseAmount : undefined,
+      paidAt: billStatus === "PAID" ? (paidAt || dueDate) : undefined,
+    };
 
     if (type === "UNIQUE") {
       billsToCreate.push({
         id: "temp",
-        description: desc.trim(),
-        costCenterId: finalCcId,
-        expenseItemId: finalEiId,
+        ...baseBill,
         type,
         amount: baseAmount,
         dueDate: dueDate,
-        status: "PENDING",
+        competenceMonth: compMo,
+        competenceYear: compYr,
       });
-      if (hasExpenseItem && startYear === data.config.year) {
+      if (hasExpenseItem && baseDate.getFullYear() === data.config.year) {
         expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: startMonth, delta: baseAmount });
       }
     } else if (type === "INSTALLMENT") {
@@ -118,16 +129,19 @@ export const Payables = () => {
         if (d.getFullYear() === data.config.year) {
           billsToCreate.push({
             id: "temp" + i,
+            ...baseBill,
+            status: i === 0 ? billStatus : "PENDING",
+            paidAmount: i === 0 && billStatus === "PAID" ? installmentAmount : undefined,
+            paidAt: i === 0 && billStatus === "PAID" ? (paidAt || dueDate) : undefined,
             description: `${desc.trim()} (${i + 1}/${instCount})`,
-            costCenterId: finalCcId,
-            expenseItemId: finalEiId,
             type,
             amount: installmentAmount,
             dueDate: d.toISOString().split("T")[0],
             totalInstallments: instCount,
             currentInstallment: i + 1,
-            status: "PENDING",
             groupId,
+            competenceMonth: d.getMonth(),
+            competenceYear: d.getFullYear(),
           });
           if (hasExpenseItem) expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: d.getMonth(), delta: installmentAmount });
         }
@@ -138,14 +152,16 @@ export const Payables = () => {
         d.setMonth(i);
         billsToCreate.push({
           id: "temp" + i,
-          description: desc.trim(),
-          costCenterId: finalCcId,
-          expenseItemId: finalEiId,
+          ...baseBill,
+          status: i === startMonth ? billStatus : "PENDING",
+          paidAmount: i === startMonth && billStatus === "PAID" ? baseAmount : undefined,
+          paidAt: i === startMonth && billStatus === "PAID" ? (paidAt || dueDate) : undefined,
           type,
           amount: baseAmount,
           dueDate: d.toISOString().split("T")[0],
-          status: "PENDING",
           groupId,
+          competenceMonth: i,
+          competenceYear: data.config.year,
         });
         if (hasExpenseItem) expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: i, delta: baseAmount });
       }
@@ -158,7 +174,8 @@ export const Payables = () => {
 
   const resetForm = () => {
     setDesc(""); setAmount(""); setDueDate(""); setCcId(""); setEiId("");
-    setType("UNIQUE"); setInstallments("2");
+    setType("UNIQUE"); setInstallments("2"); setBillStatus("PENDING"); setPaidAt("");
+    setCompetenceMonth(String(curMo)); setCompetenceYear("");
     setIsNewCc(false); setNewCcName(""); setIsNewEi(false); setNewEiName("");
   };
 
@@ -226,10 +243,21 @@ export const Payables = () => {
 
   const getTypeIcon = (t: string) => {
     switch (t) {
-      case "RECURRENT_FIXED":    return <Repeat size={14} className="text-blue-500" />;
-      case "RECURRENT_VARIABLE": return <Zap size={14} className="text-amber-500" />;
+      case "RECURRENT":
+      case "RECURRENT_FIXED":
+      case "RECURRENT_VARIABLE": return <Repeat size={14} className="text-blue-500" />;
       case "INSTALLMENT":        return <CreditCard size={14} className="text-purple-500" />;
       default:                   return <Receipt size={14} className="text-slate-500" />;
+    }
+  };
+
+  const getTypeLabel = (t: string) => {
+    switch (t) {
+      case "RECURRENT":
+      case "RECURRENT_FIXED":
+      case "RECURRENT_VARIABLE": return "Recorrente";
+      case "INSTALLMENT":        return "Parcelada";
+      default:                   return "Única";
     }
   };
 
@@ -267,7 +295,7 @@ export const Payables = () => {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">Lançamentos de {MF[curMo]}</h3>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => { setCompetenceMonth(String(curMo)); setCompetenceYear(String(data.config.year)); setShowModal(true); }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
           >
             <Plus size={14} /> Nova Conta
@@ -325,6 +353,9 @@ export const Payables = () => {
                           <CalendarIcon size={10} />
                           {bill.dueDate.split("-").reverse().join("/")}
                         </span>
+                        <span className="text-[9px] text-text-tertiary">
+                          {getTypeLabel(bill.type)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -360,22 +391,113 @@ export const Payables = () => {
         size="md"
       >
         <div className="space-y-4">
+          {/* A - Descricao */}
           <div>
             <label className={lbl}>Descrição</label>
             <input value={desc} onChange={(e) => setDesc(e.target.value)} className={inp} placeholder="Ex: Conta de Luz" autoFocus />
           </div>
 
+          {/* B - Tipo de Lancamento */}
+          <div>
+            <label className={cn(lbl, "mb-2")}>Tipo de Lançamento</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: "UNIQUE" as const, label: "Única", icon: Receipt, desc: "Pagamento avulso" },
+                { id: "RECURRENT" as const, label: "Recorrente", icon: Repeat, desc: "Repete todo mês" },
+                { id: "INSTALLMENT" as const, label: "Parcelada", icon: CreditCard, desc: "Divide em parcelas" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setType(t.id)}
+                  className={cn(
+                    "flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors cursor-pointer",
+                    type === t.id
+                      ? "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
+                      : "bg-surface-tertiary border-transparent text-text-secondary hover:text-text-primary"
+                  )}
+                >
+                  <t.icon size={16} />
+                  <span className="text-[11px] font-semibold">{t.label}</span>
+                  <span className="text-[8px] opacity-70">{t.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* C - Prazos e Competencia */}
+          <div>
+            <label className={cn(lbl, "mb-2")}>Prazos e Competência</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Vencimento *</label>
+                <DatePicker value={dueDate} onChange={setDueDate} />
+              </div>
+              <div>
+                <label className={lbl}>Mês de Competência *</label>
+                <Select
+                  value={competenceMonth}
+                  onValueChange={setCompetenceMonth}
+                  options={monthOptions}
+                  placeholder="Selecione..."
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Valor + Parcelas */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lbl}>Valor Total (R$)</label>
               <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={inp} placeholder="0,00" />
             </div>
-            <div>
-              <label className={lbl}>Vencimento</label>
-              <DatePicker value={dueDate} onChange={setDueDate} />
-            </div>
+            {type === "INSTALLMENT" && (
+              <div>
+                <label className={lbl}>Número de Parcelas</label>
+                <input type="number" value={installments} onChange={(e) => setInstallments(e.target.value)} className={inp} min="2" max="48" />
+                <p className="text-[9px] mt-1 text-text-tertiary">Valor por parcela: {brl(Number(amount) / (Number(installments) || 2))}</p>
+              </div>
+            )}
           </div>
 
+          {/* D - Status do Pagamento */}
+          <div>
+            <label className={cn(lbl, "mb-2")}>Status do Pagamento</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setBillStatus("PENDING")}
+                className={cn(
+                  "flex flex-col p-3 rounded-lg border transition-colors cursor-pointer",
+                  billStatus === "PENDING"
+                    ? "bg-amber-500/10 border-amber-500/30"
+                    : "bg-surface-tertiary border-transparent"
+                )}
+              >
+                <span className={cn("text-[11px] font-bold", billStatus === "PENDING" ? "text-amber-600" : "text-text-secondary")}>PENDENTE</span>
+                <span className="text-[8px] text-text-tertiary mt-0.5">Ainda não pago</span>
+              </button>
+              <button
+                onClick={() => setBillStatus("PAID")}
+                className={cn(
+                  "flex flex-col p-3 rounded-lg border transition-colors cursor-pointer",
+                  billStatus === "PAID"
+                    ? "bg-accent-green/10 border-accent-green/30"
+                    : "bg-surface-tertiary border-transparent"
+                )}
+              >
+                <span className={cn("text-[11px] font-bold", billStatus === "PAID" ? "text-accent-green" : "text-text-secondary")}>JÁ PAGO</span>
+                <span className="text-[8px] text-text-tertiary mt-0.5">Lançamento realizado</span>
+              </button>
+            </div>
+            {billStatus === "PAID" && (
+              <div className="mt-3">
+                <label className={lbl}>Data do Pagamento</label>
+                <DatePicker value={paidAt} onChange={setPaidAt} />
+                <p className="text-[9px] mt-1 text-text-tertiary">Se vazio, usa a data de vencimento.</p>
+              </div>
+            )}
+          </div>
+
+          {/* E - Centro de Custo / Item de Despesa */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -415,47 +537,20 @@ export const Payables = () => {
               )}
             </div>
           </div>
-
-          <div>
-            <label className={cn(lbl, "mb-2")}>Tipo de Conta</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: "UNIQUE", label: "Única", icon: Receipt },
-                { id: "RECURRENT_FIXED", label: "Fixa", icon: Repeat },
-                { id: "RECURRENT_VARIABLE", label: "Variável", icon: Zap },
-                { id: "INSTALLMENT", label: "Parcelada", icon: CreditCard },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setType(t.id as typeof type)}
-                  className={cn(
-                    "flex items-center gap-2 p-2.5 rounded-lg border transition-colors cursor-pointer text-[11px] font-semibold",
-                    type === t.id
-                      ? "bg-accent-blue/10 border-accent-blue/30 text-accent-blue"
-                      : "bg-surface-tertiary border-transparent text-text-secondary hover:text-text-primary"
-                  )}
-                >
-                  <t.icon size={14} /> {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {type === "INSTALLMENT" && (
-            <div>
-              <label className={lbl}>Número de Parcelas</label>
-              <input type="number" value={installments} onChange={(e) => setInstallments(e.target.value)} className={inp} min="2" max="48" />
-              <p className="text-[9px] mt-1 text-text-tertiary">O valor total será dividido por {installments || 2}.</p>
-            </div>
-          )}
         </div>
 
         <div className="flex gap-2 mt-6">
           <button
-            onClick={handleSaveBill}
-            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer mt-2"
+            onClick={() => { setShowModal(false); resetForm(); }}
+            className="px-4 py-2.5 rounded-lg text-xs font-semibold border border-border-secondary text-text-secondary hover:bg-surface-tertiary transition-colors cursor-pointer bg-transparent"
           >
-            Salvar Conta
+            Cancelar
+          </button>
+          <button
+            onClick={handleSaveBill}
+            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
+          >
+            + Confirmar Lançamento
           </button>
         </div>
       </Modal>

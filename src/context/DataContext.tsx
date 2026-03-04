@@ -28,6 +28,7 @@ import {
   createBills as apiCreateBills,
   updateBill as apiUpdateBill,
   deleteBills as apiDeleteBills,
+  replicateRecurrentBills as apiReplicateRecurrent,
   updateSchoolConfig as apiUpdateSchoolConfig,
   resetSchoolData as apiResetSchoolData,
   addInstrument as apiAddInstrument,
@@ -505,7 +506,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleSaveBills = async (bills: PayableBill[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => {
     if (!data || !schoolId) return;
     markSaving();
-    const apiRows = bills.map((b) => ({ description: b.description, expenseItemId: b.expenseItemId, billType: b.type, amount: b.amount, dueDate: b.dueDate, totalInstallments: b.totalInstallments, currentInstallment: b.currentInstallment, status: b.status, groupId: b.groupId }));
+    const apiRows = bills.map((b) => ({ description: b.description, expenseItemId: b.expenseItemId, billType: b.type, amount: b.amount, dueDate: b.dueDate, totalInstallments: b.totalInstallments, currentInstallment: b.currentInstallment, status: b.status, groupId: b.groupId, paidAmount: b.paidAmount, paidAt: b.paidAt, competenceMonth: b.competenceMonth, competenceYear: b.competenceYear }));
     const { data: created, error } = await apiCreateBills(schoolId, apiRows);
     if (error || !created) { markError(); return; }
 
@@ -520,7 +521,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prev) return prev;
       const eiMap = new Map<string, string>();
       prev.expenses.forEach((cc) => cc.items.forEach((it) => { if (it.id) eiMap.set(it.id, cc.id); }));
-      const newBills: PayableBill[] = created.map((b: any) => ({ id: b.id, description: b.description, costCenterId: b.expense_item_id ? (eiMap.get(b.expense_item_id) || "") : "", expenseItemId: b.expense_item_id || "", type: b.bill_type, amount: Number(b.amount), paidAmount: b.paid_amount != null ? Number(b.paid_amount) : undefined, dueDate: b.due_date, paidAt: b.paid_at || undefined, totalInstallments: b.total_installments || undefined, currentInstallment: b.current_installment || undefined, status: b.status, groupId: b.group_id || undefined }));
+      const newBills: PayableBill[] = created.map((b: any) => ({ id: b.id, description: b.description, costCenterId: b.expense_item_id ? (eiMap.get(b.expense_item_id) || "") : "", expenseItemId: b.expense_item_id || "", type: (b.bill_type === "RECURRENT_FIXED" || b.bill_type === "RECURRENT_VARIABLE" ? "RECURRENT" : b.bill_type) as PayableBill["type"], amount: Number(b.amount), paidAmount: b.paid_amount != null ? Number(b.paid_amount) : undefined, dueDate: b.due_date, paidAt: b.paid_at || undefined, totalInstallments: b.total_installments || undefined, currentInstallment: b.current_installment || undefined, status: b.status, groupId: b.group_id || undefined, competenceMonth: b.competence_month ?? undefined, competenceYear: b.competence_year ?? undefined }));
       let newExpenses = prev.expenses;
       if (expenseUpdates.length > 0) {
         newExpenses = prev.expenses.map((cc) => ({ ...cc, items: cc.items.map((it) => {
@@ -541,9 +542,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const bill = data.payableBills.find((b) => b.id === billId);
     if (!bill) return;
     const newStatus = bill.status === "PAID" ? "PENDING" : "PAID";
-    setData((prev) => prev ? { ...prev, payableBills: prev.payableBills.map((b) => b.id === billId ? { ...b, status: newStatus as "PAID" | "PENDING" } : b) } : prev);
+    const paidAt = newStatus === "PAID" ? new Date().toISOString().split("T")[0] : undefined;
+    const paidAmount = newStatus === "PAID" ? bill.amount : undefined;
+    setData((prev) => prev ? { ...prev, payableBills: prev.payableBills.map((b) => b.id === billId ? { ...b, status: newStatus as "PAID" | "PENDING", paidAt, paidAmount } : b) } : prev);
     markSaving();
-    const { error } = await apiUpdateBill(billId, { status: newStatus });
+    const updates: any = { status: newStatus };
+    if (newStatus === "PAID") { updates.paidAt = paidAt; updates.paidAmount = bill.amount; }
+    else { updates.paidAt = null; updates.paidAmount = null; }
+    const { error } = await apiUpdateBill(billId, updates);
     if (error) { markError(); return; }
     markSaved();
   };
@@ -648,6 +654,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleUpdateConfig = async (key: string, value: string | number) => {
     if (!data || !schoolId) return;
+    const oldYear = data.config.year;
     setData((prev) => prev ? { ...prev, config: { ...prev.config, [key]: value } } : prev);
     if (key === "schoolName" && selectedSchool) {
       setSelectedSchool({ ...selectedSchool, name: value as string });
@@ -657,6 +664,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const apiKey = map[key] || key;
     const { error } = await apiUpdateSchoolConfig(schoolId, { [apiKey]: value });
     if (error) { markError(); return; }
+
+    if (key === "year" && typeof value === "number" && value !== oldYear) {
+      await apiReplicateRecurrent(schoolId, oldYear, value);
+      await fetchData();
+    }
+
     markSaved();
   };
 

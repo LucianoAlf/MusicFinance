@@ -253,9 +253,9 @@ export const Financial = () => {
             </h3>
             <button
               onClick={() => setShowAddRev(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-tertiary text-text-primary text-[10px] font-semibold hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
             >
-              <Plus size={12} /> Nova Receita
+              <Plus size={14} /> Nova Receita
             </button>
           </div>
           <div className="space-y-1.5">
@@ -334,9 +334,9 @@ export const Financial = () => {
           </h3>
           <button
             onClick={() => setShowAddCC(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-tertiary text-text-primary text-[10px] font-semibold hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
           >
-            <Plus size={12} /> Novo Centro de Custo
+            <Plus size={14} /> Novo Centro de Custo
           </button>
         </div>
         <div className="space-y-3">

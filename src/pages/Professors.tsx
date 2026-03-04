@@ -425,7 +425,7 @@ export const Professors = () => {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-tertiary text-text-primary text-[11px] font-medium hover:bg-surface-tertiary/80 transition-all border border-border-secondary cursor-pointer">
+                  <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-[11px] font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">
                     <UserPlus size={14} /> Novo Aluno
                   </button>
                   <button onClick={() => removeProf(prof.id)} className="p-2 rounded-lg bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-all border border-border-secondary cursor-pointer">

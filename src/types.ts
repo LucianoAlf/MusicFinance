@@ -70,7 +70,7 @@ export interface PayableBill {
   description: string;
   costCenterId: string;
   expenseItemId: string;
-  type: 'UNIQUE' | 'RECURRENT_FIXED' | 'RECURRENT_VARIABLE' | 'INSTALLMENT';
+  type: 'UNIQUE' | 'RECURRENT' | 'INSTALLMENT';
   amount: number;
   paidAmount?: number;
   dueDate: string;
@@ -79,6 +79,8 @@ export interface PayableBill {
   currentInstallment?: number;
   status: 'PENDING' | 'PAID';
   groupId?: string;
+  competenceMonth?: number;
+  competenceYear?: number;
 }
 
 export interface DashboardData {

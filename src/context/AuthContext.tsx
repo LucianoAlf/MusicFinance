@@ -40,34 +40,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(null);
 
   const fetchTenantId = useCallback(async (userId: string) => {
+    console.log("fetchTenantId calling supabase...");
     const { data } = await supabase
       .from("tenant_users")
       .select("tenant_id")
       .eq("user_id", userId)
       .limit(1)
-      .single();
+      .maybeSingle();
+    console.log("fetchTenantId done:", data);
     if (data) setTenantId(data.tenant_id);
     return data?.tenant_id ?? null;
   }, []);
 
   const checkSuperadmin = useCallback(async (userId: string) => {
+    console.log("checkSuperadmin calling supabase...");
     const { data } = await supabase
       .from("superadmins")
       .select("user_id")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
+    console.log("checkSuperadmin done:", data);
     setIsSuperadmin(!!data);
     return !!data;
   }, []);
 
   const ensureTenantForInvitedUser = useCallback(async (userId: string, email: string) => {
+    console.log("ensureTenantForInvitedUser started...");
     const tid = await fetchTenantId(userId);
-    if (tid) return tid;
+    if (tid) {
+      console.log("ensureTenantForInvitedUser done (existing)");
+      return tid;
+    }
 
+    console.log("ensureTenantForInvitedUser calling RPC...");
     const { data: newTid, error } = await supabase.rpc("create_tenant_for_user", {
       p_name: email.split("@")[0],
       p_email: email,
     });
+    console.log("ensureTenantForInvitedUser RPC done:", newTid, error);
     if (error) {
       console.error("Failed to create tenant for invited user:", error.message);
       return null;
@@ -77,10 +87,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchTenantId]);
 
   const fetchSchools = useCallback(async () => {
+    console.log("fetchSchools calling supabase...");
     const { data } = await supabase
       .from("schools")
       .select("id, tenant_id, name, year, default_tuition, passport_fee")
       .order("name");
+    console.log("fetchSchools done:", data?.length, "schools");
     const list = (data ?? []) as School[];
     setSchools(list);
     return list;
@@ -109,10 +121,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setSelectedSchool]);
 
   const initUser = useCallback(async (u: User) => {
-    await checkSuperadmin(u.id);
-    await ensureTenantForInvitedUser(u.id, u.email || "");
-    const list = await fetchSchools();
-    restoreSchool(list);
+    try {
+      console.log("[Auth] initUser started for", u.id);
+      await checkSuperadmin(u.id).catch(e => console.error("checkSuperadmin error", e));
+      await ensureTenantForInvitedUser(u.id, u.email || "").catch(e => console.error("ensureTenant error", e));
+      
+      const list = await fetchSchools().catch(e => {
+        console.error("fetchSchools error", e);
+        return [];
+      });
+      restoreSchool(list);
+      console.log("[Auth] initUser finished");
+    } catch (e) {
+      console.error("[Auth] initUser error:", e);
+    }
   }, [checkSuperadmin, ensureTenantForInvitedUser, fetchSchools, restoreSchool]);
 
   useEffect(() => {

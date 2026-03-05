@@ -234,6 +234,7 @@ export const Payables = () => {
 
   const saveEdit = async () => {
     if (!editingBill || !editDesc.trim() || !editAmount || !editDate) return;
+
     const newAmt = Number(editAmount);
     const oldMonth = new Date(editingBill.dueDate + "T12:00:00").getMonth();
     const newMonth = Number(editCompMo);
@@ -241,9 +242,9 @@ export const Payables = () => {
     const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
     
     const oldEiId = editingBill.expenseItemId;
-    const newEiId = editEiId || undefined;
+    const newEiId = editEiId || "";
     const oldCcId = editingBill.costCenterId;
-    const newCcId = editCcId || undefined;
+    const newCcId = editCcId || "";
     
     if (oldEiId && oldCcId) {
       expenseUpdates.push({ ccId: oldCcId, eiId: oldEiId, month: oldMonth, delta: -editingBill.amount });
@@ -257,8 +258,8 @@ export const Payables = () => {
       amount: newAmt,
       dueDate: editDate,
       type: editType,
-      expenseItemId: newEiId,
-      costCenterId: newCcId,
+      expenseItemId: newEiId || undefined,
+      costCenterId: newCcId || undefined,
       status: editStatus,
       competenceMonth: newMonth,
       competenceYear: data.config.year,

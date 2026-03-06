@@ -85,8 +85,22 @@ Deno.serve(async (req) => {
       adminClient.auth.admin.listUsers({ perPage: 1000 }),
     ]);
 
+    // Debug logs
+    console.log("[list-mentees] tenantUsersRes:", JSON.stringify(tenantUsersRes));
+    console.log("[list-mentees] allSchoolsRes:", JSON.stringify(allSchoolsRes));
+    console.log("[list-mentees] allUsersRes users count:", allUsersRes.data?.users?.length);
+
+    if (tenantUsersRes.error) {
+      console.error("[list-mentees] Error fetching tenant_users:", tenantUsersRes.error);
+      return new Response(JSON.stringify({ error: "Failed to fetch tenant_users", details: tenantUsersRes.error }), {
+        status: 500,
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+      });
+    }
+
     const tenantUsers = tenantUsersRes.data || [];
     if (tenantUsers.length === 0) {
+      console.log("[list-mentees] No tenant_users found, returning empty array");
       return new Response(JSON.stringify([]), {
         status: 200,
         headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useData } from "../context/DataContext";
 import { cn } from "../lib/utils";
 import { School, BarChart } from "lucide-react";
@@ -6,6 +6,12 @@ import { ImportWizard } from "../components/ImportWizard";
 
 export const Config = () => {
   const { data, handleUpdateConfig } = useData();
+  const [localYear, setLocalYear] = useState<string>("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (data) setLocalYear(String(data.config.year));
+  }, [data?.config.year]);
 
   if (!data) return null;
 
@@ -14,6 +20,17 @@ export const Config = () => {
 
   const updateConfig = (k: keyof typeof data.config, v: string | number) => {
     handleUpdateConfig(k, v);
+  };
+
+  const handleYearChange = (v: string) => {
+    setLocalYear(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const num = Number(v);
+      if (num >= 2020 && num <= 2099) {
+        updateConfig("year", num);
+      }
+    }, 1000);
   };
 
   return (
@@ -45,8 +62,10 @@ export const Config = () => {
                   </label>
                   <input
                     type="number"
-                    value={data.config.year}
-                    onChange={(e) => updateConfig("year", Number(e.target.value))}
+                    value={localYear}
+                    onChange={(e) => handleYearChange(e.target.value)}
+                    min={2020}
+                    max={2099}
                     className={ic2}
                   />
                 </div>

@@ -47,7 +47,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
     instrumentsRes,
     profInstrumentsRes,
   ] = await Promise.all([
-    supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).single(),
+    supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).maybeSingle(),
     supabase.from("professors").select("id, name, instrument, cost_per_student, avatar_url").eq("school_id", schoolId).eq("active", true).order("name"),
     supabase.from("students").select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").eq("school_id", schoolId).order("name"),
     supabase.from("payments").select("id, student_id, year, month, amount, status").eq("school_id", schoolId),
@@ -227,7 +227,7 @@ export async function loadAvgTenure(schoolId: string) {
 export async function addProfessor(schoolId: string, data: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[]; avatarUrl?: string }) {
   const row: any = { school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent };
   if (data.avatarUrl) row.avatar_url = data.avatarUrl;
-  const res = await supabase.from("professors").insert(row).select("id, name, instrument, cost_per_student, avatar_url").single();
+  const res = await supabase.from("professors").insert(row).select("id, name, instrument, cost_per_student, avatar_url").maybeSingle();
   if (res.data && data.instrumentIds && data.instrumentIds.length > 0) {
     const links = data.instrumentIds.map(iid => ({ professor_id: res.data.id, instrument_id: iid }));
     await supabase.from("professor_instruments").insert(links);
@@ -240,7 +240,7 @@ export async function updateProfessor(profId: string, data: { name?: string; cos
   if (data.name !== undefined) update.name = data.name;
   if (data.costPerStudent !== undefined) update.cost_per_student = data.costPerStudent;
   if (data.avatarUrl !== undefined) update.avatar_url = data.avatarUrl;
-  return supabase.from("professors").update(update).eq("id", profId).select("id, name, instrument, cost_per_student, avatar_url").single();
+  return supabase.from("professors").update(update).eq("id", profId).select("id, name, instrument, cost_per_student, avatar_url").maybeSingle();
 }
 
 export async function deleteProfessor(profId: string) {
@@ -252,9 +252,9 @@ export async function deleteProfessor(profId: string) {
 export async function uploadProfessorAvatar(file: Blob, schoolId: string, professorId: string): Promise<string | null> {
   const path = `${schoolId}/${professorId}.jpg`;
   const { error: rmErr } = await supabase.storage.from("professor-avatars").remove([path]);
-  if (rmErr) console.warn("Remove old avatar:", rmErr.message);
+  if (rmErr) { /* old avatar removal failed, non-critical */ }
   const { error } = await supabase.storage.from("professor-avatars").upload(path, file, { contentType: "image/jpeg", upsert: true });
-  if (error) { console.error("Upload avatar error:", error.message); return null; }
+  if (error) return null;
   const { data: urlData } = supabase.storage.from("professor-avatars").getPublicUrl(path);
   return urlData?.publicUrl ? `${urlData.publicUrl}?t=${Date.now()}` : null;
 }
@@ -266,7 +266,7 @@ export async function deleteProfessorAvatar(schoolId: string, professorId: strin
 
 // ─── WRITES: Students ──────────────────────────────────────────────────────
 
-export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number }) {
+export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) {
   const row: any = {
     school_id: schoolId,
     professor_id: data.professorId,
@@ -278,9 +278,10 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
     enrollment_date: data.enrollmentDate || new Date().toISOString().split("T")[0],
     instrument_id: data.instrumentId || null,
     due_day: data.dueDay ?? 5,
+    payment_method: data.paymentMethod || null,
   };
   if (data.personId) row.person_id = data.personId;
-  return supabase.from("students").insert(row).select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id, due_day").single();
+  return supabase.from("students").insert(row).select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id, due_day, payment_method").maybeSingle();
 }
 
 export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) {
@@ -297,7 +298,7 @@ export async function updateStudent(studentId: string, data: { name?: string; si
   if (data.responsiblePhone !== undefined) update.responsible_phone = data.responsiblePhone;
   if (data.dueDay !== undefined) update.due_day = data.dueDay;
   if (data.paymentMethod !== undefined) update.payment_method = data.paymentMethod;
-  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").single();
+  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").maybeSingle();
 }
 
 export async function deleteStudent(studentId: string) {
@@ -322,14 +323,14 @@ export async function upsertPayment(data: { studentId: string; schoolId: string;
 // ─── WRITES: Cost Centers ──────────────────────────────────────────────────
 
 export async function addCostCenter(schoolId: string, data: { name: string; color: string }) {
-  return supabase.from("cost_centers").insert({ school_id: schoolId, name: data.name, color: data.color }).select("id, name, color, sort_order").single();
+  return supabase.from("cost_centers").insert({ school_id: schoolId, name: data.name, color: data.color }).select("id, name, color, sort_order").maybeSingle();
 }
 
 export async function updateCostCenter(ccId: string, data: { name?: string; color?: string }) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
   if (data.color !== undefined) update.color = data.color;
-  return supabase.from("cost_centers").update(update).eq("id", ccId).select("id, name, color, sort_order").single();
+  return supabase.from("cost_centers").update(update).eq("id", ccId).select("id, name, color, sort_order").maybeSingle();
 }
 
 export async function deleteCostCenter(ccId: string) {
@@ -340,14 +341,14 @@ export async function deleteCostCenter(ccId: string) {
 // ─── WRITES: Expense Items ─────────────────────────────────────────────────
 
 export async function addExpenseItem(costCenterId: string, data: { name: string; expenseType: "F" | "V" }) {
-  return supabase.from("expense_items").insert({ cost_center_id: costCenterId, name: data.name, expense_type: data.expenseType }).select("id, cost_center_id, name, expense_type").single();
+  return supabase.from("expense_items").insert({ cost_center_id: costCenterId, name: data.name, expense_type: data.expenseType }).select("id, cost_center_id, name, expense_type").maybeSingle();
 }
 
 export async function updateExpenseItem(eiId: string, data: { name?: string; expenseType?: "F" | "V" }) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
   if (data.expenseType !== undefined) update.expense_type = data.expenseType;
-  return supabase.from("expense_items").update(update).eq("id", eiId).select("id, cost_center_id, name, expense_type").single();
+  return supabase.from("expense_items").update(update).eq("id", eiId).select("id, cost_center_id, name, expense_type").maybeSingle();
 }
 
 export async function deleteExpenseItem(eiId: string) {
@@ -369,11 +370,11 @@ export async function upsertExpense(data: { expenseItemId: string; schoolId: str
 
 export async function addRevenueCategory(schoolId: string, name: string) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
-  return supabase.from("revenue_categories").insert({ school_id: schoolId, name, slug }).select("id, name, slug, sort_order").single();
+  return supabase.from("revenue_categories").insert({ school_id: schoolId, name, slug }).select("id, name, slug, sort_order").maybeSingle();
 }
 
 export async function updateRevenueCategory(categoryId: string, name: string) {
-  return supabase.from("revenue_categories").update({ name }).eq("id", categoryId).select("id, name, slug, sort_order").single();
+  return supabase.from("revenue_categories").update({ name }).eq("id", categoryId).select("id, name, slug, sort_order").maybeSingle();
 }
 
 export async function deleteRevenueCategory(categoryId: string) {
@@ -499,7 +500,7 @@ export async function replicateRecurrentBills(schoolId: string, fromYear: number
 // ─── WRITES: Instruments ────────────────────────────────────────────────────
 
 export async function addInstrument(schoolId: string, name: string) {
-  return supabase.from("instruments").insert({ school_id: schoolId, name }).select("id, name").single();
+  return supabase.from("instruments").insert({ school_id: schoolId, name }).select("id, name").maybeSingle();
 }
 
 export async function deleteInstrument(instrumentId: string) {

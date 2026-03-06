@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -29,6 +29,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SCHOOL_STORAGE_KEY = "musicfinance-selected-school";
+const MAX_INIT_MS = 10_000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -39,127 +40,112 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [schools, setSchools] = useState<School[]>([]);
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(null);
 
-  const fetchTenantId = useCallback(async (userId: string) => {
-    console.log("fetchTenantId calling supabase...");
-    const { data } = await supabase
-      .from("tenant_users")
-      .select("tenant_id")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-    console.log("fetchTenantId done:", data);
-    if (data) setTenantId(data.tenant_id);
-    return data?.tenant_id ?? null;
-  }, []);
+  const initDoneRef = useRef(false);
 
-  const checkSuperadmin = useCallback(async (userId: string) => {
-    console.log("checkSuperadmin calling supabase...");
-    const { data } = await supabase
-      .from("superadmins")
-      .select("user_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    console.log("checkSuperadmin done:", data);
-    setIsSuperadmin(!!data);
-    return !!data;
-  }, []);
+  const loadUserData = async (userId: string, email: string) => {
+    const [saResult, tenantResult] = await Promise.allSettled([
+      supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
+      supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).limit(1).maybeSingle(),
+    ]);
 
-  const ensureTenantForInvitedUser = useCallback(async (userId: string, email: string) => {
-    console.log("ensureTenantForInvitedUser started...");
-    const tid = await fetchTenantId(userId);
-    if (tid) {
-      console.log("ensureTenantForInvitedUser done (existing)");
-      return tid;
+    const isSA = saResult.status === "fulfilled" && !!saResult.value.data;
+    setIsSuperadmin(isSA);
+
+    let tid: string | null = null;
+    if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
+      tid = tenantResult.value.data.tenant_id;
     }
 
-    console.log("ensureTenantForInvitedUser calling RPC...");
-    const { data: newTid, error } = await supabase.rpc("create_tenant_for_user", {
-      p_name: email.split("@")[0],
-      p_email: email,
-    });
-    console.log("ensureTenantForInvitedUser RPC done:", newTid, error);
-    if (error) {
-      console.error("Failed to create tenant for invited user:", error.message);
-      return null;
+    if (!tid) {
+      const { data: newTid } = await supabase.rpc("create_tenant_for_user", {
+        p_name: email.split("@")[0],
+        p_email: email,
+      });
+      tid = newTid;
     }
-    setTenantId(newTid);
-    return newTid;
-  }, [fetchTenantId]);
 
-  const fetchSchools = useCallback(async () => {
-    console.log("fetchSchools calling supabase...");
-    const { data } = await supabase
+    setTenantId(tid);
+
+    const { data: schoolData } = await supabase
       .from("schools")
       .select("id, tenant_id, name, year, default_tuition, passport_fee")
       .order("name");
-    console.log("fetchSchools done:", data?.length, "schools");
-    const list = (data ?? []) as School[];
+    const list = (schoolData ?? []) as School[];
     setSchools(list);
-    return list;
-  }, []);
+
+    try {
+      const raw = localStorage.getItem(SCHOOL_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as School;
+        const match = list.find((s) => s.id === saved.id);
+        if (match) {
+          setSelectedSchoolState(match);
+          return;
+        }
+      }
+    } catch { /* corrupted localStorage */ }
+    if (list.length === 1) {
+      setSelectedSchoolState(list[0]);
+      localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
+    }
+  };
 
   const setSelectedSchool = useCallback((school: School) => {
     setSelectedSchoolState(school);
     localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(school));
   }, []);
 
-  const restoreSchool = useCallback((schoolList: School[]) => {
-    try {
-      const raw = localStorage.getItem(SCHOOL_STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as School;
-        const match = schoolList.find((s) => s.id === saved.id);
-        if (match) {
-          setSelectedSchoolState(match);
-          return;
-        }
-      }
-    } catch { /* ignore */ }
-    if (schoolList.length === 1) {
-      setSelectedSchool(schoolList[0]);
-    }
-  }, [setSelectedSchool]);
-
-  const initUser = useCallback(async (u: User) => {
-    try {
-      console.log("[Auth] initUser started for", u.id);
-      await checkSuperadmin(u.id).catch(e => console.error("checkSuperadmin error", e));
-      await ensureTenantForInvitedUser(u.id, u.email || "").catch(e => console.error("ensureTenant error", e));
-      
-      const list = await fetchSchools().catch(e => {
-        console.error("fetchSchools error", e);
-        return [];
-      });
-      restoreSchool(list);
-      console.log("[Auth] initUser finished");
-    } catch (e) {
-      console.error("[Auth] initUser error:", e);
-    }
-  }, [checkSuperadmin, ensureTenantForInvitedUser, fetchSchools, restoreSchool]);
+  const fetchSchools = useCallback(async (): Promise<School[]> => {
+    const { data } = await supabase
+      .from("schools")
+      .select("id, tenant_id, name, year, default_tuition, passport_fee")
+      .order("name");
+    const list = (data ?? []) as School[];
+    setSchools(list);
+    return list;
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled && loading) setLoading(false);
+    }, MAX_INIT_MS);
+
     const init = async () => {
+      if (initDoneRef.current) return;
+      initDoneRef.current = true;
+
       try {
         const { data: { session: s } } = await supabase.auth.getSession();
+        if (cancelled) return;
+
         setSession(s);
         setUser(s?.user ?? null);
 
         if (s?.user) {
-          await initUser(s.user);
+          await loadUserData(s.user.id, s.user.email || "");
         }
-      } catch (e) {
-        console.error("Auth init error:", e);
+      } catch {
+        if (cancelled) return;
+        setSession(null);
+        setUser(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
+
     init();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
+      if (cancelled) return;
+      if (event === "INITIAL_SESSION") return;
+
       setSession(s);
       setUser(s?.user ?? null);
+
       if (s?.user) {
-        await initUser(s.user);
+        await loadUserData(s.user.id, s.user.email || "");
       } else {
         setTenantId(null);
         setIsSuperadmin(false);
@@ -169,18 +155,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [initUser]);
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+      subscription.unsubscribe();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { error: error.message };
 
-    const { data: { user: u } } = await supabase.auth.getUser();
-    if (u) {
-      await initUser(u);
+      if (data.session?.user) {
+        setSession(data.session);
+        setUser(data.session.user);
+        await loadUserData(data.session.user.id, data.session.user.email || "");
+      }
+      return {};
+    } catch {
+      return { error: "Erro ao conectar. Tente novamente." };
     }
-    return {};
   };
 
   const signOut = async () => {
@@ -206,11 +202,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("schools")
       .insert({ tenant_id: tenantId, name, default_tuition: tuition, passport_fee: passport, year })
       .select("id, tenant_id, name, year, default_tuition, passport_fee")
-      .single();
+      .maybeSingle();
 
     if (error) return { error: error.message };
 
-    const list = await fetchSchools();
+    await fetchSchools();
     if (school) setSelectedSchool(school as School);
     return {};
   };

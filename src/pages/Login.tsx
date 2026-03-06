@@ -17,12 +17,25 @@ export const Login: React.FC = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const sanitizeError = (msg: string): string => {
+    const lower = msg.toLowerCase();
+    if (lower.includes("invalid login") || lower.includes("invalid password") || lower.includes("user not found"))
+      return "Email ou senha incorretos.";
+    if (lower.includes("email not confirmed"))
+      return "Email ainda nao confirmado. Verifique sua caixa de entrada.";
+    if (lower.includes("too many requests") || lower.includes("rate limit"))
+      return "Muitas tentativas. Aguarde alguns minutos.";
+    if (lower.includes("network") || lower.includes("fetch"))
+      return "Erro de conexao. Verifique sua internet.";
+    return "Erro ao entrar. Tente novamente.";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     const result = await signIn(email, password);
-    if (result.error) setError(result.error);
+    if (result.error) setError(sanitizeError(result.error));
     setLoading(false);
   };
 

@@ -54,6 +54,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Mutex para impedir execução paralela de loadUserData
   const loadingUserData = useRef(false);
+  // Flag para bloquear onAuthStateChange durante signIn
+  const signingIn = useRef(false);
 
   const loadUserData = useCallback(async (userId: string) => {
     // Mutex: se já está carregando, aguardar a conclusão em vez de retornar silenciosamente
@@ -201,6 +203,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (!mounted || event === "INITIAL_SESSION") return;
+      if (signingIn.current) return; // IGNORAR durante signIn
 
       setSession(s);
       setUser(s?.user ?? null);
@@ -224,13 +227,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
+    signingIn.current = true; // BLOQUEAR listener durante signIn
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return { error: error.message };
+      if (error) {
+        signingIn.current = false;
+        return { error: error.message };
+      }
 
       if (data.session?.user) {
         // CARREGAR DADOS PRIMEIRO — antes de setar user no React
-        // O supabase client já tem o token internamente após signInWithPassword
         await loadUserData(data.session.user.id);
         
         // SÓ DEPOIS setar user — AppRouter já terá schools e selectedSchool prontos
@@ -240,6 +246,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {};
     } catch {
       return { error: "Erro ao conectar. Tente novamente." };
+    } finally {
+      // Dar 500ms para o onAuthStateChange ter sido ignorado antes de liberar
+      setTimeout(() => { signingIn.current = false; }, 500);
     }
   };
 

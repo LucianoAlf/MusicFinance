@@ -62,8 +62,18 @@ const AppContent = () => {
 };
 
 const AppRouter = () => {
-  const { user, loading, selectedSchool, schools, isSuperadmin } = useAuth();
+  const { user, loading, selectedSchool, schools, tenantId } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Marcar que o carregamento inicial terminou após um breve delay
+  // Isso evita mostrar "Crie sua escola" durante race condition
+  React.useEffect(() => {
+    if (!loading && user && tenantId !== undefined) {
+      const timer = setTimeout(() => setInitialLoadDone(true), 200);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, user, tenantId]);
 
   if (loading) return <LoadingScreen />;
 
@@ -72,6 +82,12 @@ const AppRouter = () => {
       <Login />
     </React.Suspense>
   );
+
+  // Aguardar carregamento completo antes de decidir rota
+  // Evita mostrar "Crie sua escola" prematuramente
+  if (!initialLoadDone && schools.length === 0) {
+    return <LoadingScreen />;
+  }
 
   if (!selectedSchool) {
     if (schools.length === 0 || showCreateSchool) {

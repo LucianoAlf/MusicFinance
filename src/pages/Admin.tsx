@@ -40,14 +40,35 @@ export const Admin: React.FC = () => {
 
   const fetchMentees = useCallback(async (token: string) => {
     if (!token) { setMentees([]); return; }
-    try {
-      const res = await supabase.functions.invoke("list-mentees", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.error) throw res.error;
-      setMentees(res.data || []);
-    } catch {
-      setMentees([]);
+
+    // Retry com backoff para lidar com cold start e sessão instável
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const res = await supabase.functions.invoke("list-mentees", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        // Se retornou 401, pode ser sessão expirada - não zerar lista, manter anterior
+        if (res.error) {
+          const errMsg = String(res.error?.message || res.error || "");
+          if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
+            console.warn("[Admin] Token pode estar expirado, mantendo lista anterior");
+            return; // Não zera a lista
+          }
+          throw res.error;
+        }
+
+        setMentees(res.data || []);
+        return; // Sucesso, sair do loop
+      } catch (err) {
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 400 * attempt));
+        } else {
+          console.error("[Admin] Falha ao carregar mentorados após retries", err);
+          // Não zerar lista em caso de erro - manter estado anterior
+        }
+      }
     }
   }, []);
 

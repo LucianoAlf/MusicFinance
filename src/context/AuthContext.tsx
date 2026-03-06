@@ -29,7 +29,27 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SCHOOL_STORAGE_KEY = "musicfinance-selected-school";
-const MAX_INIT_MS = 6_000;
+const MAX_INIT_MS = 8_000;
+
+/** Aguarda um tempo antes de continuar (para estabilizar sessão) */
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Retry com backoff exponencial */
+async function retryQuery<T>(
+  fn: () => PromiseLike<{ data: T | null; error: unknown }>,
+  maxAttempts = 3,
+  baseDelayMs = 300
+): Promise<T | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const result = await fn();
+      const data = result.data;
+      if (data && (Array.isArray(data) ? data.length > 0 : true)) return data;
+    } catch { /* ignore and retry */ }
+    if (attempt < maxAttempts) await delay(baseDelayMs * attempt);
+  }
+  return null;
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -43,17 +63,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const initDoneRef = useRef(false);
 
   const loadUserData = useCallback(async (userId: string) => {
-    const [saResult, tenantResult] = await Promise.allSettled([
-      supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
-      supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
+    // Pequeno delay para garantir que a sessão está propagada no Supabase
+    await delay(150);
+
+    // Buscar superadmin e tenant em paralelo com retry
+    const [saData, tenantData] = await Promise.all([
+      retryQuery(() =>
+        supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle()
+      ),
+      retryQuery(() =>
+        supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle()
+      ),
     ]);
 
-    setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
+    setIsSuperadmin(!!saData);
 
-    let tid: string | null = null;
-    if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
-      tid = tenantResult.value.data.tenant_id;
-    }
+    const tid = (tenantData as { tenant_id: string } | null)?.tenant_id ?? null;
 
     if (!tid) {
       setTenantId(null);
@@ -65,15 +90,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setTenantId(tid);
 
-    const { data: schoolData } = await supabase
-      .from("schools")
-      .select("id, tenant_id, name, year, default_tuition, passport_fee")
-      .eq("tenant_id", tid)
-      .order("name");
+    // Buscar schools com retry (RLS pode demorar a reconhecer a sessão)
+    const schoolData = await retryQuery<School[]>(
+      () =>
+        supabase
+          .from("schools")
+          .select("id, tenant_id, name, year, default_tuition, passport_fee")
+          .eq("tenant_id", tid)
+          .order("name"),
+      4, // mais tentativas para schools
+      400
+    );
 
-    const list = (schoolData ?? []) as School[];
+    const list = schoolData ?? [];
     setSchools(list);
 
+    // Restaurar escola salva no localStorage
     try {
       const raw = localStorage.getItem(SCHOOL_STORAGE_KEY);
       if (raw) {
@@ -83,6 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch { /* corrupted */ }
 
+    // Auto-selecionar se só tem uma escola
     if (list.length === 1) {
       setSelectedSchoolState(list[0]);
       localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));

@@ -240,22 +240,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    // Limpar estado local primeiro
+    setUser(null);
+    setSession(null);
+    setTenantId(null);
+    setIsSuperadmin(false);
+    setSchools([]);
+    setSelectedSchoolState(null);
+    setDataLoaded(false);
+    localStorage.removeItem(SCHOOL_STORAGE_KEY);
+    localStorage.removeItem("musicfinance-auth");
+    sessionStorage.removeItem("musicfinance-auth");
+
     try {
       // Usar scope: "local" - "global" requer service_role key e retorna 403 com anon key
       await supabase.auth.signOut({ scope: "local" });
     } catch { /* ignore */ }
-    finally {
-      setUser(null);
-      setSession(null);
-      setTenantId(null);
-      setIsSuperadmin(false);
-      setSchools([]);
-      setSelectedSchoolState(null);
-      setDataLoaded(false);
-      localStorage.removeItem(SCHOOL_STORAGE_KEY);
-      localStorage.removeItem("musicfinance-auth");
-      sessionStorage.removeItem("musicfinance-auth");
-    }
+
+    // Forçar reload para garantir estado limpo no Chrome
+    window.location.href = "/";
   };
 
   const createSchool = async (

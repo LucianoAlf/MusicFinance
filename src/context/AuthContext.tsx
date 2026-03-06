@@ -180,14 +180,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setTenantId(null);
-    setIsSuperadmin(false);
-    setSchools([]);
-    setSelectedSchoolState(null);
-    localStorage.removeItem(SCHOOL_STORAGE_KEY);
+    try {
+      // Try a normal server-side sign out first.
+      await supabase.auth.signOut({ scope: "global" });
+    } catch {
+      // If auth lock/network fails, still force local logout.
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // Ignore and continue local cleanup below.
+      }
+    } finally {
+      setUser(null);
+      setSession(null);
+      setTenantId(null);
+      setIsSuperadmin(false);
+      setSchools([]);
+      setSelectedSchoolState(null);
+      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+      localStorage.removeItem("musicfinance-auth");
+      sessionStorage.removeItem("musicfinance-auth");
+    }
   };
 
   const createSchool = async (

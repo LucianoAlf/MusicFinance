@@ -39,27 +39,52 @@ export const Admin: React.FC = () => {
     ? { Authorization: `Bearer ${session.access_token}` }
     : undefined;
 
+  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }, []);
+
   const fetchMentees = useCallback(async () => {
     if (!session?.access_token) return;
     try {
-      const res = await supabase.functions.invoke("list-mentees", { headers: authHeaders });
+      const res = await withTimeout(
+        supabase.functions.invoke("list-mentees", { headers: authHeaders }),
+        10000
+      );
       if (res.error) throw res.error;
       setMentees(res.data || []);
     } catch { /* silent */ }
-  }, [session?.access_token]);
+  }, [session?.access_token, authHeaders, withTimeout]);
 
   const fetchInvites = useCallback(async () => {
-    const { data } = await supabase
-      .from("invites")
-      .select("id, email, status, accepted_at, created_at")
-      .order("created_at", { ascending: false });
-    setInvites(data || []);
-  }, []);
+    try {
+      const { data } = await withTimeout(
+        supabase
+          .from("invites")
+          .select("id, email, status, accepted_at, created_at")
+          .order("created_at", { ascending: false }),
+        10000
+      );
+      setInvites(data || []);
+    } catch {
+      setInvites([]);
+    }
+  }, [withTimeout]);
 
   const loadAll = useCallback(async () => {
     setLoadingData(true);
-    await Promise.all([fetchMentees(), fetchInvites()]);
-    setLoadingData(false);
+    try {
+      await Promise.allSettled([fetchMentees(), fetchInvites()]);
+    } finally {
+      setLoadingData(false);
+    }
   }, [fetchMentees, fetchInvites]);
 
   useEffect(() => {

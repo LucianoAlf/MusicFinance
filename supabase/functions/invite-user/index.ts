@@ -1,49 +1,35 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  Deno.env.get("ALLOWED_ORIGIN") || "",
-].filter(Boolean);
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  };
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: getCorsHeaders(req) });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const siteUrl = Deno.env.get("SITE_URL") || "https://music-finance.vercel.app";
 
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing auth header" }), {
-        status: 401,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      });
-    }
+    if (!authHeader) return json({ error: "Missing auth header" }, 401);
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      });
-    }
+    if (userError || !user) return json({ error: "Unauthorized" }, 401);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -51,63 +37,73 @@ Deno.serve(async (req) => {
       .from("superadmins")
       .select("user_id")
       .eq("user_id", user.id)
-      .single();
-
-    if (!admin) {
-      return new Response(JSON.stringify({ error: "Forbidden: not a superadmin" }), {
-        status: 403,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      });
-    }
+      .maybeSingle();
+    if (!admin) return json({ error: "Forbidden: not a superadmin" }, 403);
 
     const { email } = await req.json();
-    if (!email || typeof email !== "string") {
-      return new Response(JSON.stringify({ error: "Email is required" }), {
-        status: 400,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      });
-    }
+    if (!email || typeof email !== "string") return json({ error: "Email is required" }, 400);
+    const trimmedEmail = email.toLowerCase().trim();
 
-    const { data: existingInvite } = await adminClient
+    const { data: existingPending } = await adminClient
       .from("invites")
-      .select("id, status")
-      .eq("email", email.toLowerCase().trim())
+      .select("id")
+      .eq("email", trimmedEmail)
       .eq("status", "pending")
-      .single();
+      .maybeSingle();
+    if (existingPending) return json({ error: "Ja existe um convite pendente para este email" }, 409);
 
-    if (existingInvite) {
-      return new Response(JSON.stringify({ error: "Invite already pending for this email" }), {
-        status: 409,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      });
+    // Send invite email through GoTrue endpoint.
+    const inviteRes = await fetch(`${supabaseUrl}/auth/v1/invite`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${serviceRoleKey}`,
+        "apikey": serviceRoleKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: trimmedEmail }),
+    });
+    if (!inviteRes.ok) {
+      const errBody = await inviteRes.text();
+      return json({ error: `Erro ao enviar convite: ${errBody}` }, inviteRes.status);
     }
 
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      email.toLowerCase().trim(),
-      { redirectTo: `${siteUrl}/` }
-    );
+    const inviteData = await inviteRes.json();
+    const invitedUserId: string | undefined = inviteData?.id;
 
-    if (inviteError) {
-      return new Response(JSON.stringify({ error: inviteError.message }), {
-        status: 400,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      });
+    // Pre-provision tenant mapping now, so mentee appears immediately after acceptance.
+    if (invitedUserId) {
+      const { data: hasTenantUser } = await adminClient
+        .from("tenant_users")
+        .select("id")
+        .eq("user_id", invitedUserId)
+        .maybeSingle();
+
+      if (!hasTenantUser) {
+        const defaultName = trimmedEmail.split("@")[0] || "mentorado";
+        const { data: tenant, error: tenantError } = await adminClient
+          .from("tenants")
+          .insert({ name: defaultName, email: trimmedEmail })
+          .select("id")
+          .maybeSingle();
+
+        if (tenantError) return json({ error: tenantError.message }, 400);
+        if (tenant?.id) {
+          const { error: linkError } = await adminClient
+            .from("tenant_users")
+            .insert({ tenant_id: tenant.id, user_id: invitedUserId, role: "owner", status: "active" });
+          if (linkError) return json({ error: linkError.message }, 400);
+        }
+      }
     }
 
     await adminClient.from("invites").insert({
-      email: email.toLowerCase().trim(),
+      email: trimmedEmail,
       invited_by: user.id,
       status: "pending",
     });
 
-    return new Response(JSON.stringify({ success: true, userId: inviteData.user?.id }), {
-      status: 200,
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-    });
+    return json({ success: true, userId: invitedUserId });
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-    });
+    return json({ error: String(err) }, 500);
   }
 });

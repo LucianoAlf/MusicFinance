@@ -42,10 +42,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const initDoneRef = useRef(false);
 
+  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }, []);
+
   const loadUserData = async (userId: string, email: string) => {
     const [saResult, tenantResult] = await Promise.allSettled([
-      supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
-      supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).limit(1).maybeSingle(),
+      withTimeout(
+        supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
+        10000
+      ),
+      withTimeout(
+        supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).limit(1).maybeSingle(),
+        10000
+      ),
     ]);
 
     const isSA = saResult.status === "fulfilled" && !!saResult.value.data;
@@ -56,20 +74,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tid = tenantResult.value.data.tenant_id;
     }
 
+    // Important: never auto-create tenant on transient auth/cache failures.
+    // Invite flow now pre-provisions tenant_users in the backend.
     if (!tid) {
-      const { data: newTid } = await supabase.rpc("create_tenant_for_user", {
-        p_name: email.split("@")[0],
-        p_email: email,
-      });
-      tid = newTid;
+      setTenantId(null);
+      setSchools([]);
+      setSelectedSchoolState(null);
+      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+      return;
     }
 
     setTenantId(tid);
 
-    const { data: schoolData } = await supabase
-      .from("schools")
-      .select("id, tenant_id, name, year, default_tuition, passport_fee")
-      .order("name");
+    const { data: schoolData } = await withTimeout(
+      supabase
+        .from("schools")
+        .select("id, tenant_id, name, year, default_tuition, passport_fee")
+        .order("name"),
+      10000
+    );
     const list = (schoolData ?? []) as School[];
     setSchools(list);
 
@@ -124,7 +147,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(s?.user ?? null);
 
         if (s?.user) {
-          await loadUserData(s.user.id, s.user.email || "");
+          try {
+            await loadUserData(s.user.id, s.user.email || "");
+          } catch {
+            setTenantId(null);
+            setSchools([]);
+            setSelectedSchoolState(null);
+          }
         }
       } catch {
         if (cancelled) return;
@@ -145,7 +174,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(s?.user ?? null);
 
       if (s?.user) {
-        await loadUserData(s.user.id, s.user.email || "");
+        try {
+          await loadUserData(s.user.id, s.user.email || "");
+        } catch {
+          setTenantId(null);
+          setSchools([]);
+          setSelectedSchoolState(null);
+        }
       } else {
         setTenantId(null);
         setIsSuperadmin(false);
@@ -161,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [withTimeout]);
 
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
     try {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { cn } from "../lib/utils";
@@ -25,6 +25,7 @@ interface Invite {
 
 export const Admin: React.FC = () => {
   const { session, isSuperadmin, user } = useAuth();
+  const accessToken = session?.access_token ?? "";
   const [mentees, setMentees] = useState<Mentee[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [email, setEmail] = useState("");
@@ -34,10 +35,8 @@ export const Admin: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-
-  const authHeaders = session?.access_token
-    ? { Authorization: `Bearer ${session.access_token}` }
-    : undefined;
+  const loadInFlightRef = useRef<Promise<void> | null>(null);
+  const lastLoadedKeyRef = useRef<string>("");
 
   const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -52,18 +51,29 @@ export const Admin: React.FC = () => {
   }, []);
 
   const fetchMentees = useCallback(async () => {
-    if (!session?.access_token) return;
+    if (!accessToken) {
+      setMentees([]);
+      return;
+    }
     try {
       const res = await withTimeout(
-        supabase.functions.invoke("list-mentees", { headers: authHeaders }),
+        supabase.functions.invoke("list-mentees", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }),
         10000
       );
       if (res.error) throw res.error;
       setMentees(res.data || []);
-    } catch { /* silent */ }
-  }, [session?.access_token, authHeaders, withTimeout]);
+    } catch {
+      setMentees([]);
+    }
+  }, [accessToken, withTimeout]);
 
   const fetchInvites = useCallback(async () => {
+    if (!accessToken) {
+      setInvites([]);
+      return;
+    }
     try {
       const { data } = await withTimeout(
         supabase
@@ -76,20 +86,38 @@ export const Admin: React.FC = () => {
     } catch {
       setInvites([]);
     }
-  }, [withTimeout]);
+  }, [withTimeout, accessToken]);
 
   const loadAll = useCallback(async () => {
-    setLoadingData(true);
+    if (loadInFlightRef.current) {
+      await loadInFlightRef.current;
+      return;
+    }
+
+    const run = (async () => {
+      setLoadingData(true);
+      try {
+        await Promise.allSettled([fetchMentees(), fetchInvites()]);
+      } finally {
+        setLoadingData(false);
+      }
+    })();
+
+    loadInFlightRef.current = run;
     try {
-      await Promise.allSettled([fetchMentees(), fetchInvites()]);
+      await run;
     } finally {
-      setLoadingData(false);
+      loadInFlightRef.current = null;
     }
   }, [fetchMentees, fetchInvites]);
 
   useEffect(() => {
-    if (isSuperadmin) loadAll();
-  }, [loadAll, isSuperadmin]);
+    if (!isSuperadmin || !accessToken || !user?.id) return;
+    const loadKey = `${user.id}:${accessToken}`;
+    if (lastLoadedKeyRef.current === loadKey) return;
+    lastLoadedKeyRef.current = loadKey;
+    loadAll();
+  }, [loadAll, isSuperadmin, accessToken, user?.id]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -112,7 +140,7 @@ export const Admin: React.FC = () => {
     try {
       const res = await supabase.functions.invoke("invite-user", {
         body: { email: trimmed },
-        headers: authHeaders,
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
       if (res.error) throw new Error(res.error.message || "Erro ao enviar convite");
       if (res.data?.error) throw new Error(res.data.error);
@@ -138,7 +166,7 @@ export const Admin: React.FC = () => {
     try {
       const res = await supabase.functions.invoke("manage-mentee", {
         body: { action, userId },
-        headers: authHeaders,
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
       if (res.error) throw new Error(res.error.message || "Erro na operacao");
       if (res.data?.error) throw new Error(res.data.error);

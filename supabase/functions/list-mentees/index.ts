@@ -1,17 +1,36 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  Deno.env.get("ALLOWED_ORIGIN") || "",
-].filter(Boolean);
+const STATIC_ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"];
+
+function getConfiguredOrigins() {
+  const single = Deno.env.get("ALLOWED_ORIGIN") || "";
+  const list = Deno.env.get("ALLOWED_ORIGINS") || "";
+  return [
+    single,
+    ...list
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
+  ];
+}
+
+function isLocalNetworkOrigin(origin: string) {
+  return /^http:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+):(\d+)$/.test(
+    origin,
+  );
+}
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const allowedOrigins = [...STATIC_ALLOWED_ORIGINS, ...getConfiguredOrigins()];
+  const allowOriginByRule =
+    allowedOrigins.includes(origin) || isLocalNetworkOrigin(origin);
+  const allowedOrigin = allowOriginByRule ? origin : origin || STATIC_ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    Vary: "Origin",
   };
 }
 

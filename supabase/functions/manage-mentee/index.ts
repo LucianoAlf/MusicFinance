@@ -1,17 +1,36 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  Deno.env.get("ALLOWED_ORIGIN") || "",
-].filter(Boolean);
+const STATIC_ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"];
+
+function getConfiguredOrigins() {
+  const single = Deno.env.get("ALLOWED_ORIGIN") || "";
+  const list = Deno.env.get("ALLOWED_ORIGINS") || "";
+  return [
+    single,
+    ...list
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
+  ];
+}
+
+function isLocalNetworkOrigin(origin: string) {
+  return /^http:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+):(\d+)$/.test(
+    origin,
+  );
+}
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const allowedOrigins = [...STATIC_ALLOWED_ORIGINS, ...getConfiguredOrigins()];
+  const allowOriginByRule =
+    allowedOrigins.includes(origin) || isLocalNetworkOrigin(origin);
+  const allowedOrigin = allowOriginByRule ? origin : origin || STATIC_ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    Vary: "Origin",
   };
 }
 
@@ -95,10 +114,20 @@ Deno.serve(async (req) => {
 
     const tenantIds = [...new Set((links || []).map((l) => l.tenant_id).filter(Boolean))] as string[];
 
-    const { error: invitesError } = await adminClient.from("invites").delete().eq("email", (
-      await adminClient.auth.admin.getUserById(userId)
-    ).data.user?.email || "");
-    if (invitesError) return json(req, { error: invitesError.message }, 400);
+    const { data: targetUserRes, error: targetUserError } = await adminClient.auth.admin.getUserById(userId);
+    const targetEmail = targetUserRes?.user?.email || null;
+
+    if (targetUserError && !targetUserError.message.toLowerCase().includes("not found")) {
+      return json(req, { error: targetUserError.message }, 400);
+    }
+
+    if (targetEmail) {
+      const { error: invitesError } = await adminClient
+        .from("invites")
+        .delete()
+        .eq("email", targetEmail);
+      if (invitesError) return json(req, { error: invitesError.message }, 400);
+    }
 
     const { error: linkDeleteError } = await adminClient.from("tenant_users").delete().eq("user_id", userId);
     if (linkDeleteError) return json(req, { error: linkDeleteError.message }, 400);
@@ -116,9 +145,11 @@ Deno.serve(async (req) => {
     }
 
     const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(userId);
-    if (authDeleteError) return json(req, { error: authDeleteError.message }, 400);
+    if (authDeleteError && !authDeleteError.message.toLowerCase().includes("not found")) {
+      return json(req, { error: authDeleteError.message }, 400);
+    }
 
-    return json(req, { success: true, deleted: true });
+    return json(req, { success: true, deleted: true, alreadyDeleted: !!authDeleteError });
   } catch (err) {
     return json(req, { error: String(err) }, 500);
   }

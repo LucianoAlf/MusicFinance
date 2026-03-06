@@ -46,21 +46,22 @@ export const Admin: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      // DEBUG temporário - verificar resposta completa
+      console.log("[Admin] list-mentees response:", JSON.stringify({ error: res.error, dataType: typeof res.data, dataIsArray: Array.isArray(res.data), dataLength: Array.isArray(res.data) ? res.data.length : 'N/A', data: res.data }));
+
       if (res.error) {
         const errMsg = String(res.error?.message || res.error || "");
-        // Se 401, pode ser sessão expirada - manter lista anterior
         if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
-          console.warn("[Admin] Token pode estar expirado, mantendo lista anterior");
+          console.warn("[Admin] Token expirado, mantendo lista anterior");
           return;
         }
-        console.error("[Admin] Erro ao carregar mentorados:", res.error);
-        return; // Manter lista anterior
+        console.error("[Admin] Erro:", res.error);
+        return;
       }
 
       setMentees(res.data || []);
     } catch (err) {
       console.error("[Admin] Erro ao carregar mentorados:", err);
-      // Manter lista anterior, não zerar
     }
   }, []);
 

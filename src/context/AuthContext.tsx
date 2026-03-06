@@ -56,8 +56,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadingUserData = useRef(false);
 
   const loadUserData = useCallback(async (userId: string) => {
-    // Mutex: impedir execução paralela
-    if (loadingUserData.current) return;
+    // Mutex: se já está carregando, aguardar a conclusão em vez de retornar silenciosamente
+    if (loadingUserData.current) {
+      // Aguardar a chamada em andamento terminar (poll simples)
+      let waited = 0;
+      while (loadingUserData.current && waited < 5000) {
+        await new Promise(r => setTimeout(r, 100));
+        waited += 100;
+      }
+      return; // A chamada anterior já setou dataLoaded
+    }
     loadingUserData.current = true;
 
     try {
@@ -170,7 +178,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
       } finally {
         clearTimeout(safetyTimeout);
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setDataLoaded(true); // SEMPRE liberar dataLoaded ao fim do init
+        }
       }
     };
 

@@ -133,18 +133,50 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const schoolId = selectedSchool?.id;
+  const schoolYear = selectedSchool?.year ?? new Date().getFullYear();
 
-  const fetchData = useCallback(async () => {
+  // OTIMIZAÇÃO: Carregar dados e KPIs em PARALELO (não sequencial)
+  const fetchAllData = useCallback(async () => {
     if (!schoolId) return;
     setLoading(true);
-    const result = await loadSchoolData(schoolId);
-    if (result.data) {
-      setData(result.data);
-      slugMapRef.current = result.slugMap;
-      setInstruments(result.instruments);
+
+    // Carregar tudo em paralelo: dados da escola + KPIs
+    const [dataResult, kpisRes, breakevenRes, tenureRes] = await Promise.all([
+      loadSchoolData(schoolId),
+      loadMonthlyKpis(schoolId, schoolYear),
+      loadBreakeven(schoolId, schoolYear),
+      loadAvgTenure(schoolId),
+    ]);
+
+    if (dataResult.data) {
+      setData(dataResult.data);
+      slugMapRef.current = dataResult.slugMap;
+      setInstruments(dataResult.instruments);
     }
+
+    setViewKpis({
+      monthly: (kpisRes.data || []).map((k: any) => ({
+        month: k.month,
+        tuitionRevenue: Number(k.tuition_revenue),
+        payingStudents: Number(k.paying_students),
+        activeStudents: Number(k.active_students),
+        newEnrollments: Number(k.new_enrollments),
+        churnedStudents: Number(k.churned_students),
+        professorPayroll: Number(k.professor_payroll),
+        churnRate: Number(k.churn_rate),
+      })),
+      breakeven: (breakevenRes.data || []).map((b: any) => ({
+        month: b.month,
+        fixedCosts: Number(b.fixed_costs),
+        variableCosts: Number(b.variable_costs),
+        revenue: Number(b.revenue),
+        breakevenRevenue: b.breakeven_revenue != null ? Number(b.breakeven_revenue) : null,
+      })),
+      avgTenureMonths: tenureRes.data?.avg_tenure_months ? Number(tenureRes.data.avg_tenure_months) : 0,
+    });
+
     setLoading(false);
-  }, [schoolId]);
+  }, [schoolId, schoolYear]);
 
   const refreshKpis = useCallback(async () => {
     if (!schoolId || !data) return;
@@ -176,8 +208,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [schoolId, data]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { if (data) refreshKpis(); }, [data, refreshKpis]);
+  useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
   useEffect(() => {
     if (dark) { document.body.classList.add("dark"); document.body.classList.remove("light"); }
@@ -685,7 +716,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (key === "year" && typeof value === "number" && value !== oldYear) {
       await apiReplicateRecurrent(schoolId, oldYear, value);
-      await fetchData();
+      await fetchAllData();
     }
 
     markSaved();
@@ -696,11 +727,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaving();
     const { error } = await apiResetSchoolData(schoolId);
     if (error) { markError(); return; }
-    await fetchData();
+    await fetchAllData();
     markSaved();
   };
 
-  const refreshData = fetchData;
+  const refreshData = fetchAllData;
 
   // Mostrar loading screen enquanto carrega dados (evita tela preta)
   if (loading || !data) {

@@ -702,7 +702,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshData = fetchData;
 
-  if (loading || !data) return null;
+  // Mostrar loading screen enquanto carrega dados (evita tela preta)
+  if (loading || !data) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-surface-primary">
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary mb-4 font-sans uppercase">MF</h1>
+        <div className="animate-spin rounded-full h-6 w-6 border-2 border-accent-blue border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <DataContext.Provider

@@ -29,7 +29,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SCHOOL_STORAGE_KEY = "musicfinance-selected-school";
-const MAX_INIT_MS = 10_000;
+const MAX_INIT_MS = 6_000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -42,40 +42,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const initDoneRef = useRef(false);
 
-  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
-    });
-    try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  }, []);
-
-  const loadUserData = async (userId: string, email: string) => {
+  const loadUserData = useCallback(async (userId: string) => {
     const [saResult, tenantResult] = await Promise.allSettled([
-      withTimeout(
-        supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
-        10000
-      ),
-      withTimeout(
-        supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).limit(1).maybeSingle(),
-        10000
-      ),
+      supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
+      supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
     ]);
 
-    const isSA = saResult.status === "fulfilled" && !!saResult.value.data;
-    setIsSuperadmin(isSA);
+    setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
 
     let tid: string | null = null;
     if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
       tid = tenantResult.value.data.tenant_id;
     }
 
-    // Important: never auto-create tenant on transient auth/cache failures.
-    // Invite flow now pre-provisions tenant_users in the backend.
     if (!tid) {
       setTenantId(null);
       setSchools([]);
@@ -86,13 +65,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setTenantId(tid);
 
-    const { data: schoolData } = await withTimeout(
-      supabase
-        .from("schools")
-        .select("id, tenant_id, name, year, default_tuition, passport_fee")
-        .order("name"),
-      10000
-    );
+    const { data: schoolData } = await supabase
+      .from("schools")
+      .select("id, tenant_id, name, year, default_tuition, passport_fee")
+      .eq("tenant_id", tid)
+      .order("name");
+
     const list = (schoolData ?? []) as School[];
     setSchools(list);
 
@@ -101,17 +79,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (raw) {
         const saved = JSON.parse(raw) as School;
         const match = list.find((s) => s.id === saved.id);
-        if (match) {
-          setSelectedSchoolState(match);
-          return;
-        }
+        if (match) { setSelectedSchoolState(match); return; }
       }
-    } catch { /* corrupted localStorage */ }
+    } catch { /* corrupted */ }
+
     if (list.length === 1) {
       setSelectedSchoolState(list[0]);
       localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
     }
-  };
+  }, []);
 
   const setSelectedSchool = useCallback((school: School) => {
     setSelectedSchoolState(school);
@@ -147,13 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(s?.user ?? null);
 
         if (s?.user) {
-          try {
-            await loadUserData(s.user.id, s.user.email || "");
-          } catch {
-            setTenantId(null);
-            setSchools([]);
-            setSelectedSchoolState(null);
-          }
+          try { await loadUserData(s.user.id); } catch { /* silent */ }
         }
       } catch {
         if (cancelled) return;
@@ -167,20 +137,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-      if (cancelled) return;
-      if (event === "INITIAL_SESSION") return;
+      if (cancelled || event === "INITIAL_SESSION") return;
 
       setSession(s);
       setUser(s?.user ?? null);
 
       if (s?.user) {
-        try {
-          await loadUserData(s.user.id, s.user.email || "");
-        } catch {
-          setTenantId(null);
-          setSchools([]);
-          setSelectedSchoolState(null);
-        }
+        try { await loadUserData(s.user.id); } catch { /* silent */ }
       } else {
         setTenantId(null);
         setIsSuperadmin(false);
@@ -196,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [withTimeout]);
+  }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
     try {
@@ -206,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.session?.user) {
         setSession(data.session);
         setUser(data.session.user);
-        await loadUserData(data.session.user.id, data.session.user.email || "");
+        await loadUserData(data.session.user.id);
       }
       return {};
     } catch {
@@ -216,15 +179,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      // Try a normal server-side sign out first.
       await supabase.auth.signOut({ scope: "global" });
     } catch {
-      // If auth lock/network fails, still force local logout.
-      try {
-        await supabase.auth.signOut({ scope: "local" });
-      } catch {
-        // Ignore and continue local cleanup below.
-      }
+      try { await supabase.auth.signOut({ scope: "local" }); } catch { /* ignore */ }
     } finally {
       setUser(null);
       setSession(null);
@@ -259,13 +216,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {};
   };
 
-  const refreshSchools = fetchSchools;
-
   return (
     <AuthContext.Provider
       value={{
         user, session, loading, tenantId, isSuperadmin, schools, selectedSchool,
-        setSelectedSchool, signIn, signOut, createSchool, refreshSchools,
+        setSelectedSchool, signIn, signOut, createSchool, refreshSchools: fetchSchools,
       }}
     >
       {children}

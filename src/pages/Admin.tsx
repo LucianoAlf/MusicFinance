@@ -35,87 +35,54 @@ export const Admin: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const loadInFlightRef = useRef<Promise<void> | null>(null);
-  const lastLoadedKeyRef = useRef<string>("");
+  const lastTokenRef = useRef("");
+  const loadingRef = useRef(false);
 
-  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
-    });
+  const fetchMentees = useCallback(async (token: string) => {
+    if (!token) { setMentees([]); return; }
     try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  }, []);
-
-  const fetchMentees = useCallback(async () => {
-    if (!accessToken) {
-      setMentees([]);
-      return;
-    }
-    try {
-      const res = await withTimeout(
-        supabase.functions.invoke("list-mentees", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }),
-        10000
-      );
+      const res = await supabase.functions.invoke("list-mentees", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.error) throw res.error;
       setMentees(res.data || []);
     } catch {
       setMentees([]);
     }
-  }, [accessToken, withTimeout]);
+  }, []);
 
   const fetchInvites = useCallback(async () => {
-    if (!accessToken) {
-      setInvites([]);
-      return;
-    }
     try {
-      const { data } = await withTimeout(
-        supabase
-          .from("invites")
-          .select("id, email, status, accepted_at, created_at")
-          .order("created_at", { ascending: false }),
-        10000
-      );
+      const { data } = await supabase
+        .from("invites")
+        .select("id, email, status, accepted_at, created_at")
+        .order("created_at", { ascending: false });
       setInvites(data || []);
     } catch {
       setInvites([]);
     }
-  }, [withTimeout, accessToken]);
+  }, []);
+
+  const refreshData = useCallback(async () => {
+    await Promise.allSettled([fetchMentees(accessToken), fetchInvites()]);
+  }, [fetchMentees, fetchInvites, accessToken]);
 
   const loadAll = useCallback(async () => {
-    if (loadInFlightRef.current) {
-      await loadInFlightRef.current;
-      return;
-    }
-
-    const run = (async () => {
-      setLoadingData(true);
-      try {
-        await Promise.allSettled([fetchMentees(), fetchInvites()]);
-      } finally {
-        setLoadingData(false);
-      }
-    })();
-
-    loadInFlightRef.current = run;
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLoadingData(true);
     try {
-      await run;
+      await refreshData();
     } finally {
-      loadInFlightRef.current = null;
+      setLoadingData(false);
+      loadingRef.current = false;
     }
-  }, [fetchMentees, fetchInvites]);
+  }, [refreshData]);
 
   useEffect(() => {
     if (!isSuperadmin || !accessToken || !user?.id) return;
-    const loadKey = `${user.id}:${accessToken}`;
-    if (lastLoadedKeyRef.current === loadKey) return;
-    lastLoadedKeyRef.current = loadKey;
+    if (lastTokenRef.current === accessToken) return;
+    lastTokenRef.current = accessToken;
     loadAll();
   }, [loadAll, isSuperadmin, accessToken, user?.id]);
 
@@ -147,7 +114,7 @@ export const Admin: React.FC = () => {
 
       setFeedback({ type: "success", msg: `Convite enviado para ${trimmed}` });
       setEmail("");
-      await loadAll();
+      await refreshData();
     } catch (err: any) {
       setFeedback({ type: "error", msg: err.message || "Erro ao enviar convite" });
     } finally {
@@ -179,7 +146,7 @@ export const Admin: React.FC = () => {
       setFeedback({ type: "success", msg: msgs[action] });
       setConfirmDelete(null);
       setOpenMenu(null);
-      await loadAll();
+      await refreshData();
     } catch (err: any) {
       setFeedback({ type: "error", msg: err.message || "Erro ao executar acao" });
     } finally {

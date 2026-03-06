@@ -229,9 +229,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) return { error: error.message };
 
       if (data.session?.user) {
+        // CARREGAR DADOS PRIMEIRO — antes de setar user no React
+        // O supabase client já tem o token internamente após signInWithPassword
+        await loadUserData(data.session.user.id);
+        
+        // SÓ DEPOIS setar user — AppRouter já terá schools e selectedSchool prontos
         setSession(data.session);
         setUser(data.session.user);
-        await loadUserData(data.session.user.id);
       }
       return {};
     } catch {

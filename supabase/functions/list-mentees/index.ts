@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
     const { data: tenantUsers } = await adminClient
       .from("tenant_users")
-      .select("user_id, tenant_id, role, created_at");
+      .select("user_id, tenant_id, role, status, created_at");
 
     if (!tenantUsers || tenantUsers.length === 0) {
       return new Response(JSON.stringify([]), {
@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
           userId: tu.user_id,
           email: authUser?.email || "unknown",
           role: tu.role,
+          status: tu.status || "active",
           tenantId: tu.tenant_id,
           schools: schools?.map((s) => s.name) || [],
           createdAt: tu.created_at,

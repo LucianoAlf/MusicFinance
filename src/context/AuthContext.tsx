@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -29,25 +29,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SCHOOL_STORAGE_KEY = "musicfinance-selected-school";
-const MAX_INIT_MS = 8_000;
 
-/** Aguarda um tempo antes de continuar (para estabilizar sessão) */
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Retry com backoff exponencial */
-async function retryQuery<T>(
-  fn: () => PromiseLike<{ data: T | null; error: unknown }>,
-  maxAttempts = 3,
-  baseDelayMs = 300
-): Promise<T | null> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const result = await fn();
-      const data = result.data;
-      if (data && (Array.isArray(data) ? data.length > 0 : true)) return data;
-    } catch { /* ignore and retry */ }
-    if (attempt < maxAttempts) await delay(baseDelayMs * attempt);
-  }
+/** Lê escola do localStorage de forma síncrona */
+function getStoredSchool(): School | null {
+  try {
+    const raw = localStorage.getItem(SCHOOL_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as School;
+  } catch { /* corrupted */ }
   return null;
 }
 
@@ -58,67 +46,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
-  const [selectedSchool, setSelectedSchoolState] = useState<School | null>(null);
-
-  const initDoneRef = useRef(false);
+  // Inicializar selectedSchool do localStorage SINCRONAMENTE para evitar flash
+  const [selectedSchool, setSelectedSchoolState] = useState<School | null>(getStoredSchool);
 
   const loadUserData = useCallback(async (userId: string) => {
-    // Pequeno delay para garantir que a sessão está propagada no Supabase
-    await delay(150);
-
-    // Buscar superadmin e tenant em paralelo com retry
-    const [saData, tenantData] = await Promise.all([
-      retryQuery(() =>
-        supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle()
-      ),
-      retryQuery(() =>
-        supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle()
-      ),
+    // Buscar superadmin e tenant em paralelo
+    const [saResult, tenantResult] = await Promise.allSettled([
+      supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
+      supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
     ]);
 
-    setIsSuperadmin(!!saData);
+    setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
 
-    const tid = (tenantData as { tenant_id: string } | null)?.tenant_id ?? null;
+    let tid: string | null = null;
+    if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
+      tid = tenantResult.value.data.tenant_id;
+    }
 
     if (!tid) {
       setTenantId(null);
       setSchools([]);
-      setSelectedSchoolState(null);
-      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+      // Não limpar selectedSchool aqui - manter do localStorage
       return;
     }
 
     setTenantId(tid);
 
-    // Buscar schools com retry (RLS pode demorar a reconhecer a sessão)
-    const schoolData = await retryQuery<School[]>(
-      () =>
-        supabase
-          .from("schools")
-          .select("id, tenant_id, name, year, default_tuition, passport_fee")
-          .eq("tenant_id", tid)
-          .order("name"),
-      4, // mais tentativas para schools
-      400
-    );
+    // Buscar schools
+    const { data: schoolData } = await supabase
+      .from("schools")
+      .select("id, tenant_id, name, year, default_tuition, passport_fee")
+      .eq("tenant_id", tid)
+      .order("name");
 
-    const list = schoolData ?? [];
+    const list = (schoolData ?? []) as School[];
     setSchools(list);
 
-    // Restaurar escola salva no localStorage
-    try {
-      const raw = localStorage.getItem(SCHOOL_STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as School;
-        const match = list.find((s) => s.id === saved.id);
-        if (match) { setSelectedSchoolState(match); return; }
+    // Validar escola do localStorage contra lista do servidor
+    const stored = getStoredSchool();
+    if (stored) {
+      const match = list.find((s) => s.id === stored.id);
+      if (match) {
+        setSelectedSchoolState(match);
+        return;
       }
-    } catch { /* corrupted */ }
+    }
 
     // Auto-selecionar se só tem uma escola
     if (list.length === 1) {
       setSelectedSchoolState(list[0]);
       localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
+    } else if (list.length === 0) {
+      setSelectedSchoolState(null);
+      localStorage.removeItem(SCHOOL_STORAGE_KEY);
     }
   }, []);
 
@@ -138,45 +118,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    let mounted = true;
 
-    const safetyTimer = setTimeout(() => {
-      if (!cancelled && loading) setLoading(false);
-    }, MAX_INIT_MS);
+    // Timeout de segurança - se init demorar mais de 5s, liberar loading
+    const safetyTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn("[Auth] Safety timeout - forcing loading=false");
+        setLoading(false);
+      }
+    }, 5000);
 
     const init = async () => {
-      if (initDoneRef.current) return;
-      initDoneRef.current = true;
-
       try {
         const { data: { session: s } } = await supabase.auth.getSession();
-        if (cancelled) return;
+        if (!mounted) return;
 
         setSession(s);
         setUser(s?.user ?? null);
 
         if (s?.user) {
-          try { await loadUserData(s.user.id); } catch { /* silent */ }
+          await loadUserData(s.user.id);
         }
-      } catch {
-        if (cancelled) return;
+      } catch (e) {
+        console.error("[Auth] init error:", e);
+        if (!mounted) return;
         setSession(null);
         setUser(null);
       } finally {
-        if (!cancelled) setLoading(false);
+        clearTimeout(safetyTimeout);
+        if (mounted) setLoading(false);
       }
     };
 
     init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-      if (cancelled || event === "INITIAL_SESSION") return;
+      if (!mounted || event === "INITIAL_SESSION") return;
 
       setSession(s);
       setUser(s?.user ?? null);
 
       if (s?.user) {
-        try { await loadUserData(s.user.id); } catch { /* silent */ }
+        await loadUserData(s.user.id);
       } else {
         setTenantId(null);
         setIsSuperadmin(false);
@@ -187,8 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
-      cancelled = true;
-      clearTimeout(safetyTimer);
+      mounted = false;
       subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

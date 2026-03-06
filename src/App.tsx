@@ -62,34 +62,27 @@ const AppContent = () => {
 };
 
 const AppRouter = () => {
-  const { user, loading, selectedSchool, schools, tenantId } = useAuth();
+  const { user, loading, selectedSchool, schools } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-  // Marcar que o carregamento inicial terminou após um breve delay
-  // Isso evita mostrar "Crie sua escola" durante race condition
-  React.useEffect(() => {
-    if (!loading && user && tenantId !== undefined) {
-      const timer = setTimeout(() => setInitialLoadDone(true), 200);
-      return () => clearTimeout(timer);
-    }
-  }, [loading, user, tenantId]);
-
-  if (loading) return <LoadingScreen />;
-
-  if (!user) return (
-    <React.Suspense fallback={<LoadingScreen />}>
-      <Login />
-    </React.Suspense>
-  );
-
-  // Aguardar carregamento completo antes de decidir rota
-  // Evita mostrar "Crie sua escola" prematuramente
-  if (!initialLoadDone && schools.length === 0) {
+  // Mostrar loading apenas enquanto auth está carregando
+  // selectedSchool já é inicializado do localStorage de forma síncrona
+  if (loading) {
     return <LoadingScreen />;
   }
 
+  // Usuário não logado → Login
+  if (!user) {
+    return (
+      <React.Suspense fallback={<LoadingScreen />}>
+        <Login />
+      </React.Suspense>
+    );
+  }
+
+  // Usuário logado mas sem escola selecionada
   if (!selectedSchool) {
+    // Se não tem escolas OU usuário quer criar nova
     if (schools.length === 0 || showCreateSchool) {
       return (
         <React.Suspense fallback={<LoadingScreen />}>
@@ -97,6 +90,7 @@ const AppRouter = () => {
         </React.Suspense>
       );
     }
+    // Tem escolas mas nenhuma selecionada → seletor
     return (
       <React.Suspense fallback={<LoadingScreen />}>
         <SchoolSelector onCreateNew={() => setShowCreateSchool(true)} />
@@ -104,6 +98,7 @@ const AppRouter = () => {
     );
   }
 
+  // Tudo pronto → Dashboard
   return (
     <DataProvider>
       <AppContent />

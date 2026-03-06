@@ -61,10 +61,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadingUserData.current = true;
 
     try {
-      // Buscar superadmin e tenant em paralelo
-      const [saResult, tenantResult] = await Promise.allSettled([
+      // OTIMIZAÇÃO: Buscar superadmin, tenant e schools em PARALELO
+      // A RLS filtra schools automaticamente pelo tenant do usuário logado
+      const [saResult, tenantResult, schoolsResult] = await Promise.allSettled([
         supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
         supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
+        supabase.from("schools")
+          .select("id, tenant_id, name, year, default_tuition, passport_fee")
+          .order("name"),
       ]);
 
       setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
@@ -73,26 +77,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
         tid = tenantResult.value.data.tenant_id;
       }
+      setTenantId(tid);
+
+      // Schools já veio em paralelo (RLS filtra por tenant)
+      const list = (schoolsResult.status === "fulfilled"
+        ? (schoolsResult.value.data ?? [])
+        : []) as School[];
+      setSchools(list);
 
       if (!tid) {
-        setTenantId(null);
-        setSchools([]);
-        // Não limpar selectedSchool - manter do localStorage
+        // Sem tenant - manter selectedSchool do localStorage
         setDataLoaded(true);
         return;
       }
-
-      setTenantId(tid);
-
-      // Buscar schools
-      const { data: schoolData } = await supabase
-        .from("schools")
-        .select("id, tenant_id, name, year, default_tuition, passport_fee")
-        .eq("tenant_id", tid)
-        .order("name");
-
-      const list = (schoolData ?? []) as School[];
-      setSchools(list);
 
       // Validar escola do localStorage contra lista do servidor
       const stored = getStoredSchool();
@@ -146,13 +143,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let mounted = true;
 
-    // Timeout de segurança - se init demorar mais de 5s, liberar loading
+    // Timeout de segurança - se init demorar mais de 8s, liberar loading
     const safetyTimeout = setTimeout(() => {
       if (mounted && loading) {
         console.warn("[Auth] Safety timeout - forcing loading=false");
         setLoading(false);
+        setDataLoaded(true); // CRÍTICO: liberar também dataLoaded para evitar loading infinito
       }
-    }, 5000);
+    }, 8000);
 
     const init = async () => {
       try {
@@ -220,10 +218,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut({ scope: "global" });
-    } catch {
-      try { await supabase.auth.signOut({ scope: "local" }); } catch { /* ignore */ }
-    } finally {
+      // Usar scope: "local" - "global" requer service_role key e retorna 403 com anon key
+      await supabase.auth.signOut({ scope: "local" });
+    } catch { /* ignore */ }
+    finally {
       setUser(null);
       setSession(null);
       setTenantId(null);

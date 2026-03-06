@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -15,6 +15,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  /** true quando loadUserData terminou (sucesso ou erro) */
+  dataLoaded: boolean;
   tenantId: string | null;
   isSuperadmin: boolean;
   schools: School[];
@@ -43,62 +45,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
   // Inicializar selectedSchool do localStorage SINCRONAMENTE para evitar flash
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(getStoredSchool);
 
+  // Mutex para impedir execução paralela de loadUserData
+  const loadingUserData = useRef(false);
+
   const loadUserData = useCallback(async (userId: string) => {
-    // Buscar superadmin e tenant em paralelo
-    const [saResult, tenantResult] = await Promise.allSettled([
-      supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
-      supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
-    ]);
+    // Mutex: impedir execução paralela
+    if (loadingUserData.current) return;
+    loadingUserData.current = true;
 
-    setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
+    try {
+      // Buscar superadmin e tenant em paralelo
+      const [saResult, tenantResult] = await Promise.allSettled([
+        supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
+        supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
+      ]);
 
-    let tid: string | null = null;
-    if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
-      tid = tenantResult.value.data.tenant_id;
-    }
+      setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
 
-    if (!tid) {
-      setTenantId(null);
-      setSchools([]);
-      // Não limpar selectedSchool aqui - manter do localStorage
-      return;
-    }
+      let tid: string | null = null;
+      if (tenantResult.status === "fulfilled" && tenantResult.value.data) {
+        tid = tenantResult.value.data.tenant_id;
+      }
 
-    setTenantId(tid);
-
-    // Buscar schools
-    const { data: schoolData } = await supabase
-      .from("schools")
-      .select("id, tenant_id, name, year, default_tuition, passport_fee")
-      .eq("tenant_id", tid)
-      .order("name");
-
-    const list = (schoolData ?? []) as School[];
-    setSchools(list);
-
-    // Validar escola do localStorage contra lista do servidor
-    const stored = getStoredSchool();
-    if (stored) {
-      const match = list.find((s) => s.id === stored.id);
-      if (match) {
-        setSelectedSchoolState(match);
+      if (!tid) {
+        setTenantId(null);
+        setSchools([]);
+        // Não limpar selectedSchool - manter do localStorage
+        setDataLoaded(true);
         return;
       }
-    }
 
-    // Auto-selecionar se só tem uma escola
-    if (list.length === 1) {
-      setSelectedSchoolState(list[0]);
-      localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
-    } else if (list.length === 0) {
-      setSelectedSchoolState(null);
-      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+      setTenantId(tid);
+
+      // Buscar schools
+      const { data: schoolData } = await supabase
+        .from("schools")
+        .select("id, tenant_id, name, year, default_tuition, passport_fee")
+        .eq("tenant_id", tid)
+        .order("name");
+
+      const list = (schoolData ?? []) as School[];
+      setSchools(list);
+
+      // Validar escola do localStorage contra lista do servidor
+      const stored = getStoredSchool();
+      if (stored) {
+        const match = list.find((s) => s.id === stored.id);
+        if (match) {
+          setSelectedSchoolState(match);
+          setDataLoaded(true);
+          return;
+        }
+      }
+
+      // Auto-selecionar se só tem uma escola
+      if (list.length === 1) {
+        setSelectedSchoolState(list[0]);
+        localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
+      } else if (list.length === 0) {
+        // CORREÇÃO 2: Não limpar selectedSchool se já existe no localStorage
+        // Pode ser race condition de RLS - manter estado anterior
+        const storedCheck = getStoredSchool();
+        if (!storedCheck) {
+          setSelectedSchoolState(null);
+          localStorage.removeItem(SCHOOL_STORAGE_KEY);
+        }
+      }
+
+      setDataLoaded(true);
+    } catch (e) {
+      console.error("[Auth] loadUserData error:", e);
+      setDataLoaded(true); // Mesmo em erro, marcar como tentou carregar
+    } finally {
+      loadingUserData.current = false;
     }
   }, []);
 
@@ -204,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsSuperadmin(false);
       setSchools([]);
       setSelectedSchoolState(null);
+      setDataLoaded(false);
       localStorage.removeItem(SCHOOL_STORAGE_KEY);
       localStorage.removeItem("musicfinance-auth");
       sessionStorage.removeItem("musicfinance-auth");
@@ -234,7 +261,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider
       value={{
-        user, session, loading, tenantId, isSuperadmin, schools, selectedSchool,
+        user, session, loading, dataLoaded, tenantId, isSuperadmin, schools, selectedSchool,
         setSelectedSchool, signIn, signOut, createSchool, refreshSchools: fetchSchools,
       }}
     >

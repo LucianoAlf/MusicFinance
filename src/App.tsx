@@ -62,12 +62,13 @@ const AppContent = () => {
 };
 
 const AppRouter = () => {
-  const { user, loading, selectedSchool, schools } = useAuth();
+  const { user, loading, dataLoaded, selectedSchool, schools } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
 
-  // Mostrar loading apenas enquanto auth está carregando
-  // selectedSchool já é inicializado do localStorage de forma síncrona
-  if (loading) {
+  // Mostrar loading enquanto:
+  // 1. Auth está carregando (loading=true)
+  // 2. Ou usuário logado mas dados ainda não carregaram (dataLoaded=false)
+  if (loading || (user && !dataLoaded)) {
     return <LoadingScreen />;
   }
 

@@ -41,34 +41,26 @@ export const Admin: React.FC = () => {
   const fetchMentees = useCallback(async (token: string) => {
     if (!token) { setMentees([]); return; }
 
-    // Retry com backoff para lidar com cold start e sessão instável
-    const maxAttempts = 3;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const res = await supabase.functions.invoke("list-mentees", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+    try {
+      const res = await supabase.functions.invoke("list-mentees", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        // Se retornou 401, pode ser sessão expirada - não zerar lista, manter anterior
-        if (res.error) {
-          const errMsg = String(res.error?.message || res.error || "");
-          if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
-            console.warn("[Admin] Token pode estar expirado, mantendo lista anterior");
-            return; // Não zera a lista
-          }
-          throw res.error;
+      if (res.error) {
+        const errMsg = String(res.error?.message || res.error || "");
+        // Se 401, pode ser sessão expirada - manter lista anterior
+        if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
+          console.warn("[Admin] Token pode estar expirado, mantendo lista anterior");
+          return;
         }
-
-        setMentees(res.data || []);
-        return; // Sucesso, sair do loop
-      } catch (err) {
-        if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 400 * attempt));
-        } else {
-          console.error("[Admin] Falha ao carregar mentorados após retries", err);
-          // Não zerar lista em caso de erro - manter estado anterior
-        }
+        console.error("[Admin] Erro ao carregar mentorados:", res.error);
+        return; // Manter lista anterior
       }
+
+      setMentees(res.data || []);
+    } catch (err) {
+      console.error("[Admin] Erro ao carregar mentorados:", err);
+      // Manter lista anterior, não zerar
     }
   }, []);
 

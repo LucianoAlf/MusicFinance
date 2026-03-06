@@ -88,9 +88,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTenantId(tid);
 
       // Schools já veio em paralelo (RLS filtra por tenant)
-      const list = (schoolsResult.status === "fulfilled"
+      let list = (schoolsResult.status === "fulfilled"
         ? (schoolsResult.value.data ?? [])
         : []) as School[];
+
+      // Se schools veio vazio mas tenant existe, pode ser race condition de RLS
+      // Retry com filtro explícito de tenant_id
+      if (list.length === 0 && tid) {
+        const { data: retryData } = await supabase
+          .from("schools")
+          .select("id, tenant_id, name, year, default_tuition, passport_fee")
+          .eq("tenant_id", tid)
+          .order("name");
+        list = (retryData ?? []) as School[];
+      }
+
       setSchools(list);
 
       if (!tid) {

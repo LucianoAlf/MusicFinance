@@ -33,52 +33,29 @@ export type SlugMap = Record<string, string>; // slug -> id
 // ─── LOAD ──────────────────────────────────────────────────────────────────
 
 export async function loadSchoolData(schoolId: string): Promise<{ data: DashboardData | null; slugMap: SlugMap; instruments: Instrument[]; error: string | null }> {
-  const [
-    schoolRes,
-    professorsRes,
-    studentsRes,
-    paymentsRes,
-    costCentersRes,
-    expenseItemsRes,
-    expensesRes,
-    revCatsRes,
-    revenuesRes,
-    billsRes,
-    instrumentsRes,
-    profInstrumentsRes,
-  ] = await Promise.all([
-    supabase.from("schools").select("id, name, year, default_tuition, passport_fee").eq("id", schoolId).maybeSingle(),
-    supabase.from("professors").select("id, name, instrument, cost_per_student, avatar_url").eq("school_id", schoolId).eq("active", true).order("name"),
-    supabase.from("students").select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").eq("school_id", schoolId).order("name"),
-    supabase.from("payments").select("id, student_id, year, month, amount, status").eq("school_id", schoolId),
-    supabase.from("cost_centers").select("id, name, color, sort_order").eq("school_id", schoolId).order("sort_order"),
-    supabase.from("expense_items").select("id, cost_center_id, name, expense_type, cost_centers!inner(school_id)").eq("cost_centers.school_id", schoolId),
-    supabase.from("expenses").select("id, expense_item_id, year, month, amount").eq("school_id", schoolId),
-    supabase.from("revenue_categories").select("id, name, slug, sort_order").eq("school_id", schoolId).order("sort_order"),
-    supabase.from("revenues").select("id, category_id, year, month, amount").eq("school_id", schoolId),
-    supabase.from("bills").select("id, expense_item_id, description, bill_type, amount, paid_amount, due_date, paid_at, total_installments, current_installment, status, group_id, competence_month, competence_year").eq("school_id", schoolId).order("due_date"),
-    supabase.from("instruments").select("id, name").eq("school_id", schoolId).order("name"),
-    supabase.from("professor_instruments").select("professor_id, instrument_id, instruments(id, name)"),
-  ]);
+  // UMA única chamada RPC em vez de 12 queries separadas
+  const { data: raw, error } = await supabase.rpc('get_school_dashboard', { 
+    p_school_id: schoolId 
+  });
 
-  const err = schoolRes.error || professorsRes.error || studentsRes.error || paymentsRes.error || costCentersRes.error || expenseItemsRes.error || expensesRes.error || revCatsRes.error || revenuesRes.error || billsRes.error;
-  if (err || !schoolRes.data) return { data: null, slugMap: {}, instruments: [], error: err?.message || "School not found" };
+  if (error || !raw?.school) {
+    return { data: null, slugMap: {}, instruments: [], error: error?.message || "School not found" };
+  }
 
-  const school = schoolRes.data as DbSchool;
-  const professors = (professorsRes.data || []) as DbProfessor[];
-  const students = (studentsRes.data || []) as (DbStudent)[];
-  const payments = (paymentsRes.data || []) as DbPayment[];
-  const allInstruments = (instrumentsRes.data || []) as DbInstrument[];
-  const profInstruments = (profInstrumentsRes.data || []) as DbProfInstrument[];
-  const profIds = new Set(professors.map(p => p.id));
-  const filteredProfInstruments = profInstruments.filter(pi => profIds.has(pi.professor_id));
+  // raw já contém todos os dados agregados pelo Postgres
+  const school = raw.school as DbSchool;
+  const professors = (raw.professors || []) as DbProfessor[];
+  const students = (raw.students || []) as DbStudent[];
+  const payments = (raw.payments || []) as DbPayment[];
+  const allInstruments = (raw.instruments || []) as DbInstrument[];
+  const profInstruments = (raw.professor_instruments || []) as { professor_id: string; instrument_id: string; instrument_name: string }[];
   const instrumentMap = new Map(allInstruments.map(i => [i.id, i.name]));
-  const costCenters = (costCentersRes.data || []) as DbCostCenter[];
-  const expenseItems = ((expenseItemsRes.data || []) as any[]).map((ei: any) => ({ id: ei.id, cost_center_id: ei.cost_center_id, name: ei.name, expense_type: ei.expense_type } as DbExpenseItem));
-  const expenses = (expensesRes.data || []) as DbExpense[];
-  const revCats = (revCatsRes.data || []) as DbRevenueCategory[];
-  const revenues = (revenuesRes.data || []) as DbRevenue[];
-  const bills = (billsRes.data || []) as DbBill[];
+  const costCenters = (raw.cost_centers || []) as DbCostCenter[];
+  const expenseItems = (raw.expense_items || []) as DbExpenseItem[];
+  const expenses = (raw.expenses || []) as DbExpense[];
+  const revCats = (raw.revenue_categories || []) as DbRevenueCategory[];
+  const revenues = (raw.revenues || []) as DbRevenue[];
+  const bills = (raw.bills || []) as DbBill[];
 
   const year = school.year;
   const slugMap: SlugMap = {};
@@ -92,15 +69,12 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
   };
 
   const builtProfessors: Professor[] = professors.map((p) => {
-    const profInsts: Instrument[] = filteredProfInstruments
+    const profInsts: Instrument[] = profInstruments
       .filter(pi => pi.professor_id === p.id)
-      .map(pi => {
-        const inst = Array.isArray(pi.instruments) ? pi.instruments[0] : pi.instruments;
-        return {
-          id: inst?.id || pi.instrument_id,
-          name: inst?.name || instrumentMap.get(pi.instrument_id) || "",
-        };
-      });
+      .map(pi => ({
+        id: pi.instrument_id,
+        name: pi.instrument_name || instrumentMap.get(pi.instrument_id) || "",
+      }));
     return {
       id: p.id,
       name: p.name,
@@ -198,6 +172,26 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
 
 // ─── VIEW READS (KPIs) ─────────────────────────────────────────────────────
 
+// Nova função RPC que substitui as 3 queries de views
+export async function loadKpisRPC(schoolId: string, year: number) {
+  const { data: raw, error } = await supabase.rpc('get_school_kpis', {
+    p_school_id: schoolId,
+    p_year: year,
+  });
+
+  if (error || !raw) {
+    return { kpis: [], breakeven: [], avgTenure: null, error: error?.message };
+  }
+
+  return {
+    kpis: raw.monthly_kpis || [],
+    breakeven: raw.breakeven || [],
+    avgTenure: raw.avg_tenure,
+    error: null,
+  };
+}
+
+// Funções legadas mantidas para compatibilidade (usadas em refreshKpis individual)
 export async function loadMonthlyKpis(schoolId: string, year: number) {
   return supabase
     .from("view_monthly_kpis")

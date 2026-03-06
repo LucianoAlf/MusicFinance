@@ -23,8 +23,14 @@ const LoadingScreen = () => (
   </div>
 );
 
+const ContentSpinner = () => (
+  <div className="flex-1 flex items-center justify-center py-32">
+    <Loader2 size={24} className="animate-spin text-accent-green" />
+  </div>
+);
+
 const AppContent = () => {
-  const { page, dark } = useData();
+  const { page, dark, dataLoading } = useData();
   const { isSuperadmin } = useAuth();
 
   React.useEffect(() => {
@@ -45,17 +51,21 @@ const AppContent = () => {
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <Header />
-        <React.Suspense fallback={<LoadingScreen />}>
-          <div className="p-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {page === "dash" && <Dashboard />}
-            {page === "profs" && <Professors />}
-            {page === "monthly" && <Financial />}
-            {page === "payables" && <Payables />}
-            {page === "dre" && <Dre />}
-            {page === "config" && <Config />}
-            {page === "admin" && isSuperadmin && <Admin />}
-          </div>
-        </React.Suspense>
+        {dataLoading ? (
+          <ContentSpinner />
+        ) : (
+          <React.Suspense fallback={<ContentSpinner />}>
+            <div className="p-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {page === "dash" && <Dashboard />}
+              {page === "profs" && <Professors />}
+              {page === "monthly" && <Financial />}
+              {page === "payables" && <Payables />}
+              {page === "dre" && <Dre />}
+              {page === "config" && <Config />}
+              {page === "admin" && isSuperadmin && <Admin />}
+            </div>
+          </React.Suspense>
+        )}
       </main>
     </div>
   );

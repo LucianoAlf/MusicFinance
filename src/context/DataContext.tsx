@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext";
 import { MS } from "../lib/utils";
 import {
   loadSchoolData,
+  loadKpisRPC,
   loadMonthlyKpis,
   loadBreakeven,
   loadAvgTenure,
@@ -90,6 +91,7 @@ interface DataContextType {
   refreshData: () => Promise<void>;
   viewKpis: ViewKpis | null;
   refreshKpis: () => Promise<void>;
+  dataLoading: boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -135,17 +137,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const schoolId = selectedSchool?.id;
   const schoolYear = selectedSchool?.year ?? new Date().getFullYear();
 
-  // OTIMIZAÇÃO: Carregar dados e KPIs em PARALELO (não sequencial)
+  // OTIMIZAÇÃO: 2 RPCs em paralelo em vez de 15 queries separadas
   const fetchAllData = useCallback(async () => {
     if (!schoolId) return;
     setLoading(true);
 
-    // Carregar tudo em paralelo: dados da escola + KPIs
-    const [dataResult, kpisRes, breakevenRes, tenureRes] = await Promise.all([
+    // Carregar dados + KPIs em paralelo (2 RPCs)
+    const [dataResult, kpisResult] = await Promise.all([
       loadSchoolData(schoolId),
-      loadMonthlyKpis(schoolId, schoolYear),
-      loadBreakeven(schoolId, schoolYear),
-      loadAvgTenure(schoolId),
+      loadKpisRPC(schoolId, schoolYear),
     ]);
 
     if (dataResult.data) {
@@ -154,8 +154,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setInstruments(dataResult.instruments);
     }
 
+    // Mapear KPIs do resultado da RPC
+    const kpis = kpisResult.kpis || [];
+    const breakeven = kpisResult.breakeven || [];
+    const avgTenure = kpisResult.avgTenure;
+
     setViewKpis({
-      monthly: (kpisRes.data || []).map((k: any) => ({
+      monthly: kpis.map((k: any) => ({
         month: k.month,
         tuitionRevenue: Number(k.tuition_revenue),
         payingStudents: Number(k.paying_students),
@@ -165,14 +170,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         professorPayroll: Number(k.professor_payroll),
         churnRate: Number(k.churn_rate),
       })),
-      breakeven: (breakevenRes.data || []).map((b: any) => ({
+      breakeven: breakeven.map((b: any) => ({
         month: b.month,
         fixedCosts: Number(b.fixed_costs),
         variableCosts: Number(b.variable_costs),
         revenue: Number(b.revenue),
         breakevenRevenue: b.breakeven_revenue != null ? Number(b.breakeven_revenue) : null,
       })),
-      avgTenureMonths: tenureRes.data?.avg_tenure_months ? Number(tenureRes.data.avg_tenure_months) : 0,
+      avgTenureMonths: avgTenure?.avg_tenure_months ? Number(avgTenure.avg_tenure_months) : 0,
     });
 
     setLoading(false);
@@ -733,15 +738,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshData = fetchAllData;
 
-  // Mostrar loading screen enquanto carrega dados (evita tela preta)
-  if (loading || !data) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-surface-primary">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary mb-4 font-sans uppercase">MF</h1>
-        <div className="animate-spin rounded-full h-6 w-6 border-2 border-accent-blue border-t-transparent" />
-      </div>
-    );
-  }
+  // SEMPRE renderizar o Provider - dataLoading indica se dados estão carregando
+  const dataLoading = loading || !data;
 
   return (
     <DataContext.Provider
@@ -759,6 +757,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handleSaveBills, handleUpdateBill, handleDeleteBills, handleToggleBillStatus,
         handleUpdateConfig, handleResetData, refreshData,
         viewKpis, refreshKpis,
+        dataLoading,
       }}
     >
       {children}

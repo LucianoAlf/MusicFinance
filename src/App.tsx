@@ -72,7 +72,7 @@ const AppContent = () => {
 };
 
 const AppRouter = () => {
-  const { user, loading, dataLoaded, selectedSchool, schools } = useAuth();
+  const { user, loading, dataLoaded, selectedSchool, schools, schoolsLoaded, tenantId } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
 
   // Mostrar loading enquanto:
@@ -91,8 +91,22 @@ const AppRouter = () => {
     );
   }
 
+  if (selectedSchool) {
+    return (
+      <DataProvider>
+        <AppContent />
+      </DataProvider>
+    );
+  }
+
   // Usuário logado mas sem escola selecionada
   if (!selectedSchool) {
+    // Se existe tenant e as schools ainda não terminaram de carregar em background,
+    // manter loading para evitar flash de CreateSchool.
+    if (tenantId && !schoolsLoaded && !showCreateSchool) {
+      return <LoadingScreen />;
+    }
+
     // Se não tem escolas OU usuário quer criar nova
     if (schools.length === 0 || showCreateSchool) {
       return (
@@ -108,13 +122,6 @@ const AppRouter = () => {
       </React.Suspense>
     );
   }
-
-  // Tudo pronto → Dashboard
-  return (
-    <DataProvider>
-      <AppContent />
-    </DataProvider>
-  );
 };
 
 export default function App() {

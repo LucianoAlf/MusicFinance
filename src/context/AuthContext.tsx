@@ -20,6 +20,7 @@ interface AuthContextType {
   tenantId: string | null;
   isSuperadmin: boolean;
   schools: School[];
+  schoolsLoaded: boolean;
   selectedSchool: School | null;
   setSelectedSchool: (school: School) => void;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
@@ -49,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
+  const [schoolsLoaded, setSchoolsLoaded] = useState(false);
   // Inicializar selectedSchool do localStorage SINCRONAMENTE para evitar flash
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(getStoredSchool);
 
@@ -56,6 +58,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadingUserData = useRef(false);
   // Flag para bloquear onAuthStateChange durante signIn
   const signingIn = useRef(false);
+
+  const validateSelectedSchool = useCallback((list: School[]) => {
+    const stored = getStoredSchool();
+    if (stored) {
+      const match = list.find((s) => s.id === stored.id);
+      if (match) {
+        setSelectedSchoolState(match);
+        localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(match));
+        return;
+      }
+    }
+
+    if (list.length === 1) {
+      setSelectedSchoolState(list[0]);
+      localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
+      return;
+    }
+
+    if (list.length === 0) {
+      setSelectedSchoolState(null);
+      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+      return;
+    }
+
+    if (stored) {
+      setSelectedSchoolState(null);
+      localStorage.removeItem(SCHOOL_STORAGE_KEY);
+    }
+  }, []);
+
+  const fetchSchoolsForTenant = useCallback(async (tid: string) => {
+    setSchoolsLoaded(false);
+    try {
+      const { data } = await supabase
+        .from("schools")
+        .select("id, tenant_id, name, year, default_tuition, passport_fee")
+        .eq("tenant_id", tid)
+        .order("name");
+
+      const list = (data ?? []) as School[];
+      setSchools(list);
+      validateSelectedSchool(list);
+    } catch (e) {
+      console.error("[Auth] fetchSchoolsForTenant error:", e);
+      setSchools([]);
+    } finally {
+      setSchoolsLoaded(true);
+    }
+  }, [validateSelectedSchool]);
 
   const loadUserData = useCallback(async (userId: string) => {
     // Mutex: se já está carregando, aguardar a conclusão em vez de retornar silenciosamente
@@ -71,14 +122,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadingUserData.current = true;
 
     try {
-      // OTIMIZAÇÃO: Buscar superadmin, tenant e schools em PARALELO
-      // A RLS filtra schools automaticamente pelo tenant do usuário logado
-      const [saResult, tenantResult, schoolsResult] = await Promise.allSettled([
+      // Buscar apenas superadmin + tenant durante auth.
+      // Schools carrega em background para não bloquear a navegação inicial.
+      const [saResult, tenantResult] = await Promise.allSettled([
         supabase.from("superadmins").select("user_id").eq("user_id", userId).maybeSingle(),
         supabase.from("tenant_users").select("tenant_id").eq("user_id", userId).maybeSingle(),
-        supabase.from("schools")
-          .select("id, tenant_id, name, year, default_tuition, passport_fee")
-          .order("name"),
       ]);
 
       setIsSuperadmin(saResult.status === "fulfilled" && !!saResult.value.data);
@@ -89,63 +137,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setTenantId(tid);
 
-      // Schools já veio em paralelo (RLS filtra por tenant)
-      let list = (schoolsResult.status === "fulfilled"
-        ? (schoolsResult.value.data ?? [])
-        : []) as School[];
-
-      // Se schools veio vazio mas tenant existe, pode ser race condition de RLS
-      // Retry com filtro explícito de tenant_id
-      if (list.length === 0 && tid) {
-        const { data: retryData } = await supabase
-          .from("schools")
-          .select("id, tenant_id, name, year, default_tuition, passport_fee")
-          .eq("tenant_id", tid)
-          .order("name");
-        list = (retryData ?? []) as School[];
-      }
-
-      setSchools(list);
-
       if (!tid) {
-        // Sem tenant - manter selectedSchool do localStorage
+        setSchools([]);
+        setSchoolsLoaded(true);
         setDataLoaded(true);
         return;
       }
 
-      // Validar escola do localStorage contra lista do servidor
-      const stored = getStoredSchool();
-      if (stored) {
-        const match = list.find((s) => s.id === stored.id);
-        if (match) {
-          setSelectedSchoolState(match);
-          setDataLoaded(true);
-          return;
-        }
-      }
-
-      // Auto-selecionar se só tem uma escola
-      if (list.length === 1) {
-        setSelectedSchoolState(list[0]);
-        localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(list[0]));
-      } else if (list.length === 0) {
-        // CORREÇÃO 2: Não limpar selectedSchool se já existe no localStorage
-        // Pode ser race condition de RLS - manter estado anterior
-        const storedCheck = getStoredSchool();
-        if (!storedCheck) {
-          setSelectedSchoolState(null);
-          localStorage.removeItem(SCHOOL_STORAGE_KEY);
-        }
-      }
-
+      setSchoolsLoaded(false);
       setDataLoaded(true);
+      void fetchSchoolsForTenant(tid);
     } catch (e) {
       console.error("[Auth] loadUserData error:", e);
       setDataLoaded(true); // Mesmo em erro, marcar como tentou carregar
     } finally {
       loadingUserData.current = false;
     }
-  }, []);
+  }, [fetchSchoolsForTenant]);
 
   const setSelectedSchool = useCallback((school: School) => {
     setSelectedSchoolState(school);
@@ -153,37 +161,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const fetchSchools = useCallback(async (): Promise<School[]> => {
+    setSchoolsLoaded(false);
     const { data } = await supabase
       .from("schools")
       .select("id, tenant_id, name, year, default_tuition, passport_fee")
       .order("name");
     const list = (data ?? []) as School[];
     setSchools(list);
+    setSchoolsLoaded(true);
+    validateSelectedSchool(list);
     return list;
-  }, []);
+  }, [validateSelectedSchool]);
 
   useEffect(() => {
     let mounted = true;
 
-    // Timeout de segurança - se init demorar mais de 8s, liberar loading
+    // Timeout de segurança do auth: libera só o loading inicial.
     const safetyTimeout = setTimeout(() => {
       if (mounted && loading) {
         console.warn("[Auth] Safety timeout - forcing loading=false");
         setLoading(false);
-        setDataLoaded(true); // CRÍTICO: liberar também dataLoaded para evitar loading infinito
       }
-    }, 8000);
+    }, 10000);
+
+    const dataTimeout = setTimeout(() => {
+      if (mounted && !dataLoaded) {
+        console.warn("[Auth] Data timeout - forcing dataLoaded=true");
+        setDataLoaded(true);
+      }
+    }, 20000);
 
     const init = async () => {
       try {
         const { data: { session: s } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        setSession(s);
-        setUser(s?.user ?? null);
-
         if (s?.user) {
+          // CARREGAR DADOS PRIMEIRO — antes de setar user no React
           await loadUserData(s.user.id);
+          // SÓ DEPOIS setar session/user — AppRouter já terá schools prontos
+          setSession(s);
+          setUser(s.user);
+        } else {
+          setSession(null);
+          setUser(null);
         }
       } catch (e) {
         console.error("[Auth] init error:", e);
@@ -192,6 +213,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
       } finally {
         clearTimeout(safetyTimeout);
+        clearTimeout(dataTimeout);
         if (mounted) {
           setLoading(false);
           setDataLoaded(true); // SEMPRE liberar dataLoaded ao fim do init
@@ -205,15 +227,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!mounted || event === "INITIAL_SESSION") return;
       if (signingIn.current) return; // IGNORAR durante signIn
 
-      setSession(s);
-      setUser(s?.user ?? null);
-
       if (s?.user) {
         await loadUserData(s.user.id);
+        setSession(s);
+        setUser(s.user);
       } else {
         setTenantId(null);
         setIsSuperadmin(false);
         setSchools([]);
+        setSchoolsLoaded(true);
         setSelectedSchoolState(null);
         localStorage.removeItem(SCHOOL_STORAGE_KEY);
       }
@@ -221,6 +243,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimeout);
+      clearTimeout(dataTimeout);
       subscription.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -238,7 +262,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.session?.user) {
         // CARREGAR DADOS PRIMEIRO — antes de setar user no React
         await loadUserData(data.session.user.id);
-        
         // SÓ DEPOIS setar user — AppRouter já terá schools e selectedSchool prontos
         setSession(data.session);
         setUser(data.session.user);
@@ -259,6 +282,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTenantId(null);
     setIsSuperadmin(false);
     setSchools([]);
+    setSchoolsLoaded(false);
     setSelectedSchoolState(null);
     setDataLoaded(false);
     localStorage.removeItem(SCHOOL_STORAGE_KEY);
@@ -298,7 +322,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider
       value={{
-        user, session, loading, dataLoaded, tenantId, isSuperadmin, schools, selectedSchool,
+        user, session, loading, dataLoaded, tenantId, isSuperadmin, schools, schoolsLoaded, selectedSchool,
         setSelectedSchool, signIn, signOut, createSchool, refreshSchools: fetchSchools,
       }}
     >

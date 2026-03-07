@@ -34,11 +34,14 @@ export type SlugMap = Record<string, string>; // slug -> id
 
 export async function loadSchoolData(schoolId: string): Promise<{ data: DashboardData | null; slugMap: SlugMap; instruments: Instrument[]; error: string | null }> {
   // UMA única chamada RPC em vez de 12 queries separadas
+  console.time("[RPC] get_school_dashboard");
   const { data: raw, error } = await supabase.rpc('get_school_dashboard', { 
     p_school_id: schoolId 
   });
+  console.timeEnd("[RPC] get_school_dashboard");
 
   if (error || !raw?.school) {
+    console.error("[RPC] get_school_dashboard error:", error?.message, "raw:", raw);
     return { data: null, slugMap: {}, instruments: [], error: error?.message || "School not found" };
   }
 

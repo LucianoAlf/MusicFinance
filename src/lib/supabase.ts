@@ -7,28 +7,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in environment variables.');
 }
 
-// Cleanup old Supabase auth keys (from previous storageKey/ports) to avoid lock conflicts.
-if (typeof window !== 'undefined') {
-  try {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      const isLegacySupabaseAuth = key.startsWith('sb-') && key.includes('auth-token');
-      if (isLegacySupabaseAuth) keysToRemove.push(key);
-    }
-    keysToRemove.forEach((key) => localStorage.removeItem(key));
-  } catch {
-    // Ignore storage cleanup failures; app can still initialize.
-  }
-}
-
+// O Supabase armazena a sessão no localStorage sob a chave configurada em `storageKey`.
+// NÃO limpar tokens de sessão aqui — isso causaria logout automático a cada F5.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'musicfinance-auth',
-    flowType: 'pkce',
-    detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    // Desabilitar navigator.locks — o lock padrão do Supabase (5s timeout)
+    // trava a inicialização em HMR/refresh quando há lock órfão de instância anterior.
+    // App é single-tab, não precisa de cross-tab lock.
+    lock: async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => await fn(),
   },
 });

@@ -42,11 +42,24 @@ function getStoredSchool(): School | null {
   return null;
 }
 
+/** Verifica se existe sessão no localStorage (leitura síncrona) */
+function hasStoredSession(): boolean {
+  try {
+    const raw = localStorage.getItem("musicfinance-auth");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return !!(parsed?.access_token || parsed?.user);
+    }
+  } catch { /* corrupted */ }
+  return false;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  // Se não tem sessão no localStorage, não precisa de spinner — Login aparece direto
+  const [loading, setLoading] = useState(hasStoredSession);
+  const [dataLoaded, setDataLoaded] = useState(!hasStoredSession());
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [schools, setSchools] = useState<School[]>([]);
@@ -176,78 +189,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let mounted = true;
 
-    // Timeout de segurança do auth: libera só o loading inicial.
-    const safetyTimeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("[Auth] Safety timeout - forcing loading=false");
+    // Safety timeout: se INITIAL_SESSION não disparar em 5s,
+    // desbloqueia UI (mostra Login). NÃO limpar localStorage — se o token
+    // refresh completar depois, INITIAL_SESSION vai setar o user normalmente.
+    const safetyTimer = setTimeout(() => {
+      if (mounted) {
+        console.warn("[Auth] INITIAL_SESSION timeout — unblocking UI");
         setLoading(false);
-      }
-    }, 10000);
-
-    const dataTimeout = setTimeout(() => {
-      if (mounted && !dataLoaded) {
-        console.warn("[Auth] Data timeout - forcing dataLoaded=true");
         setDataLoaded(true);
       }
-    }, 20000);
-
-    const init = async () => {
-      try {
-        const { data: { session: s } } = await supabase.auth.getSession();
-        if (!mounted) return;
-
-        if (s?.user) {
-          // CARREGAR DADOS PRIMEIRO — antes de setar user no React
-          await loadUserData(s.user.id);
-          // SÓ DEPOIS setar session/user — AppRouter já terá schools prontos
-          setSession(s);
-          setUser(s.user);
-        } else {
-          setSession(null);
-          setUser(null);
-        }
-      } catch (e) {
-        console.error("[Auth] init error:", e);
-        if (!mounted) return;
-        setSession(null);
-        setUser(null);
-      } finally {
-        clearTimeout(safetyTimeout);
-        clearTimeout(dataTimeout);
-        if (mounted) {
-          setLoading(false);
-          setDataLoaded(true); // SEMPRE liberar dataLoaded ao fim do init
-        }
-      }
-    };
-
-    init();
+    }, 5000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-      if (!mounted || event === "INITIAL_SESSION") return;
-      if (signingIn.current) return; // IGNORAR durante signIn
+      if (!mounted) return;
 
-      if (s?.user) {
-        await loadUserData(s.user.id);
-        setSession(s);
-        setUser(s.user);
-      } else {
+      if (event === "INITIAL_SESSION") {
+        clearTimeout(safetyTimer);
+        if (s?.user) {
+          setSession(s);
+          setUser(s.user);
+          void loadUserData(s.user.id);
+        } else {
+          setDataLoaded(true);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Ignorar eventos durante signIn (controlado manualmente)
+      if (signingIn.current) return;
+
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setUser(null);
         setTenantId(null);
         setIsSuperadmin(false);
         setSchools([]);
         setSchoolsLoaded(true);
         setSelectedSchoolState(null);
+        setDataLoaded(false);
         localStorage.removeItem(SCHOOL_STORAGE_KEY);
+        return;
+      }
+
+      // TOKEN_REFRESHED, SIGNED_IN, USER_UPDATED
+      if (s?.user) {
+        setSession(s);
+        setUser(s.user);
+        if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+          await loadUserData(s.user.id);
+        }
       }
     });
 
     return () => {
       mounted = false;
-      clearTimeout(safetyTimeout);
-      clearTimeout(dataTimeout);
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
@@ -260,11 +260,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.session?.user) {
-        // CARREGAR DADOS PRIMEIRO — antes de setar user no React
-        await loadUserData(data.session.user.id);
-        // SÓ DEPOIS setar user — AppRouter já terá schools e selectedSchool prontos
         setSession(data.session);
         setUser(data.session.user);
+        await loadUserData(data.session.user.id);
       }
       return {};
     } catch {
@@ -286,8 +284,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSelectedSchoolState(null);
     setDataLoaded(false);
     localStorage.removeItem(SCHOOL_STORAGE_KEY);
-    localStorage.removeItem("musicfinance-auth");
-    sessionStorage.removeItem("musicfinance-auth");
 
     try {
       // Usar scope: "local" - "global" requer service_role key e retorna 403 com anon key

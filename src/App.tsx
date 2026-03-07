@@ -10,7 +10,7 @@ const Payables = React.lazy(() => import("./pages/Payables").then(m => ({ defaul
 const Dre = React.lazy(() => import("./pages/Dre").then(m => ({ default: m.Dre })));
 const Config = React.lazy(() => import("./pages/Config").then(m => ({ default: m.Config })));
 const Admin = React.lazy(() => import("./pages/Admin").then(m => ({ default: m.Admin })));
-const Login = React.lazy(() => import("./pages/Login").then(m => ({ default: m.Login })));
+import { Login } from "./pages/Login";
 const SchoolSelector = React.lazy(() => import("./pages/SchoolSelector").then(m => ({ default: m.SchoolSelector })));
 const CreateSchool = React.lazy(() => import("./pages/CreateSchool").then(m => ({ default: m.CreateSchool })));
 import { cn } from "./lib/utils";
@@ -29,9 +29,30 @@ const ContentSpinner = () => (
   </div>
 );
 
+const ErrorScreen = ({ error, onRetry, onLogout }: { error: string; onRetry: () => void; onLogout: () => void }) => (
+  <div className="flex-1 flex flex-col items-center justify-center py-32 gap-4">
+    <div className="text-accent-red text-lg font-semibold">Erro ao carregar dados</div>
+    <p className="text-text-secondary text-sm max-w-md text-center">{error}</p>
+    <div className="flex gap-3 mt-2">
+      <button
+        onClick={onRetry}
+        className="px-4 py-2 rounded-lg bg-accent-green/10 text-accent-green border border-accent-green/20 hover:bg-accent-green/20 transition-colors cursor-pointer text-sm font-medium"
+      >
+        Tentar novamente
+      </button>
+      <button
+        onClick={onLogout}
+        className="px-4 py-2 rounded-lg bg-accent-red/10 text-accent-red border border-accent-red/20 hover:bg-accent-red/20 transition-colors cursor-pointer text-sm font-medium"
+      >
+        Sair
+      </button>
+    </div>
+  </div>
+);
+
 const AppContent = () => {
-  const { page, dark, dataLoading } = useData();
-  const { isSuperadmin } = useAuth();
+  const { page, dark, dataLoading, dataError, refreshData } = useData();
+  const { isSuperadmin, signOut } = useAuth();
 
   React.useEffect(() => {
     if (dark) {
@@ -53,6 +74,8 @@ const AppContent = () => {
         <Header />
         {dataLoading ? (
           <ContentSpinner />
+        ) : dataError ? (
+          <ErrorScreen error={dataError} onRetry={refreshData} onLogout={signOut} />
         ) : (
           <React.Suspense fallback={<ContentSpinner />}>
             <div className="p-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -84,11 +107,7 @@ const AppRouter = () => {
 
   // Usuário não logado → Login
   if (!user) {
-    return (
-      <React.Suspense fallback={<LoadingScreen />}>
-        <Login />
-      </React.Suspense>
-    );
+    return <Login />;
   }
 
   if (selectedSchool) {

@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 supabase/.temp/
+.claude/
+.agents/
+.mcp.json

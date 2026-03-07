@@ -92,6 +92,7 @@ interface DataContextType {
   viewKpis: ViewKpis | null;
   refreshKpis: () => Promise<void>;
   dataLoading: boolean;
+  dataError: string | null;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -100,7 +101,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { selectedSchool, setSelectedSchool } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("mf_dark_mode");
     return saved !== null ? JSON.parse(saved) : true;
@@ -139,48 +141,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // OTIMIZAÇÃO: 2 RPCs em paralelo em vez de 15 queries separadas
   const fetchAllData = useCallback(async () => {
-    if (!schoolId) return;
-    setLoading(true);
-
-    // Carregar dados + KPIs em paralelo (2 RPCs)
-    const [dataResult, kpisResult] = await Promise.all([
-      loadSchoolData(schoolId),
-      loadKpisRPC(schoolId, schoolYear),
-    ]);
-
-    if (dataResult.data) {
-      setData(dataResult.data);
-      slugMapRef.current = dataResult.slugMap;
-      setInstruments(dataResult.instruments);
+    if (!schoolId) {
+      setLoading(false);
+      return;
     }
+    setLoading(true);
+    setDataError(null);
 
-    // Mapear KPIs do resultado da RPC
-    const kpis = kpisResult.kpis || [];
-    const breakeven = kpisResult.breakeven || [];
-    const avgTenure = kpisResult.avgTenure;
+    try {
+      const [dataResult, kpisResult] = await Promise.all([
+        loadSchoolData(schoolId),
+        loadKpisRPC(schoolId, schoolYear),
+      ]);
 
-    setViewKpis({
-      monthly: kpis.map((k: any) => ({
-        month: k.month,
-        tuitionRevenue: Number(k.tuition_revenue),
-        payingStudents: Number(k.paying_students),
-        activeStudents: Number(k.active_students),
-        newEnrollments: Number(k.new_enrollments),
-        churnedStudents: Number(k.churned_students),
-        professorPayroll: Number(k.professor_payroll),
-        churnRate: Number(k.churn_rate),
-      })),
-      breakeven: breakeven.map((b: any) => ({
-        month: b.month,
-        fixedCosts: Number(b.fixed_costs),
-        variableCosts: Number(b.variable_costs),
-        revenue: Number(b.revenue),
-        breakevenRevenue: b.breakeven_revenue != null ? Number(b.breakeven_revenue) : null,
-      })),
-      avgTenureMonths: avgTenure?.avg_tenure_months ? Number(avgTenure.avg_tenure_months) : 0,
-    });
+      if (dataResult.data) {
+        setData(dataResult.data);
+        slugMapRef.current = dataResult.slugMap;
+        setInstruments(dataResult.instruments);
+      } else {
+        console.error("[Data] fetchAllData: dados retornaram null!", dataResult.error);
+        setDataError(dataResult.error || "Não foi possível carregar os dados da escola. Tente fazer login novamente.");
+        setData(null);
+      }
 
-    setLoading(false);
+      const kpis = kpisResult.kpis || [];
+      const breakeven = kpisResult.breakeven || [];
+      const avgTenure = kpisResult.avgTenure;
+
+      setViewKpis({
+        monthly: kpis.map((k: any) => ({
+          month: k.month,
+          tuitionRevenue: Number(k.tuition_revenue),
+          payingStudents: Number(k.paying_students),
+          activeStudents: Number(k.active_students),
+          newEnrollments: Number(k.new_enrollments),
+          churnedStudents: Number(k.churned_students),
+          professorPayroll: Number(k.professor_payroll),
+          churnRate: Number(k.churn_rate),
+        })),
+        breakeven: breakeven.map((b: any) => ({
+          month: b.month,
+          fixedCosts: Number(b.fixed_costs),
+          variableCosts: Number(b.variable_costs),
+          revenue: Number(b.revenue),
+          breakevenRevenue: b.breakeven_revenue != null ? Number(b.breakeven_revenue) : null,
+        })),
+        avgTenureMonths: avgTenure?.avg_tenure_months ? Number(avgTenure.avg_tenure_months) : 0,
+      });
+    } catch (e) {
+      console.error("[Data] fetchAllData EXCEPTION:", e);
+      setDataError("Erro inesperado ao carregar dados. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
   }, [schoolId, schoolYear]);
 
   const refreshKpis = useCallback(async () => {
@@ -213,7 +226,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [schoolId, data]);
 
-  useEffect(() => { fetchAllData(); }, [fetchAllData]);
+  // FIX: Usar schoolId e schoolYear como deps diretas em vez de fetchAllData
+  // para evitar loop infinito de re-renders quando o callback muda de referência
+  useEffect(() => { fetchAllData(); }, [schoolId, schoolYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (dark) { document.body.classList.add("dark"); document.body.classList.remove("light"); }
@@ -493,9 +508,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prev) return prev;
       return {
         ...prev,
-        revenue: prev.revenue.map((rc) => 
-          rc.id === categoryId 
-            ? { ...rc, amounts: rc.amounts.map((a, i) => (i === month ? amount : a)) } 
+        revenue: prev.revenue.map((rc) =>
+          rc.id === categoryId
+            ? { ...rc, amounts: rc.amounts.map((a, i) => (i === month ? amount : a)) }
             : rc
         )
       };
@@ -573,13 +588,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newBills: PayableBill[] = created.map((b: any) => ({ id: b.id, description: b.description, costCenterId: b.expense_item_id ? (eiMap.get(b.expense_item_id) || "") : "", expenseItemId: b.expense_item_id || "", type: (b.bill_type === "RECURRENT_FIXED" || b.bill_type === "RECURRENT_VARIABLE" ? "RECURRENT" : b.bill_type) as PayableBill["type"], amount: Number(b.amount), paidAmount: b.paid_amount != null ? Number(b.paid_amount) : undefined, dueDate: b.due_date, paidAt: b.paid_at || undefined, totalInstallments: b.total_installments || undefined, currentInstallment: b.current_installment || undefined, status: b.status, groupId: b.group_id || undefined, competenceMonth: b.competence_month ?? undefined, competenceYear: b.competence_year ?? undefined }));
       let newExpenses = prev.expenses;
       if (expenseUpdates.length > 0) {
-        newExpenses = prev.expenses.map((cc) => ({ ...cc, items: cc.items.map((it) => {
-          const updates = expenseUpdates.filter((eu) => eu.eiId === it.id);
-          if (updates.length === 0) return it;
-          const newAmounts = [...it.amounts];
-          updates.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
-          return { ...it, amounts: newAmounts };
-        }) }));
+        newExpenses = prev.expenses.map((cc) => ({
+          ...cc, items: cc.items.map((it) => {
+            const updates = expenseUpdates.filter((eu) => eu.eiId === it.id);
+            if (updates.length === 0) return it;
+            const newAmounts = [...it.amounts];
+            updates.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
+            return { ...it, amounts: newAmounts };
+          })
+        }));
       }
       return { ...prev, payableBills: [...prev.payableBills, ...newBills], expenses: newExpenses };
     });
@@ -631,13 +648,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prev) return prev;
       let newExpenses = prev.expenses;
       if (expenseUpdates && expenseUpdates.length > 0) {
-        newExpenses = prev.expenses.map((cc) => ({ ...cc, items: cc.items.map((it) => {
-          const eus = expenseUpdates.filter((eu) => eu.eiId === it.id);
-          if (eus.length === 0) return it;
-          const newAmounts = [...it.amounts];
-          eus.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
-          return { ...it, amounts: newAmounts };
-        }) }));
+        newExpenses = prev.expenses.map((cc) => ({
+          ...cc, items: cc.items.map((it) => {
+            const eus = expenseUpdates.filter((eu) => eu.eiId === it.id);
+            if (eus.length === 0) return it;
+            const newAmounts = [...it.amounts];
+            eus.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
+            return { ...it, amounts: newAmounts };
+          })
+        }));
       }
       return { ...prev, payableBills: prev.payableBills.map((b) => b.id === billId ? { ...b, ...updates } : b), expenses: newExpenses };
     });
@@ -661,13 +680,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prev) return prev;
       let newExpenses = prev.expenses;
       if (expenseUpdates.length > 0) {
-        newExpenses = prev.expenses.map((cc) => ({ ...cc, items: cc.items.map((it) => {
-          const eus = expenseUpdates.filter((eu) => eu.eiId === it.id);
-          if (eus.length === 0) return it;
-          const newAmounts = [...it.amounts];
-          eus.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
-          return { ...it, amounts: newAmounts };
-        }) }));
+        newExpenses = prev.expenses.map((cc) => ({
+          ...cc, items: cc.items.map((it) => {
+            const eus = expenseUpdates.filter((eu) => eu.eiId === it.id);
+            if (eus.length === 0) return it;
+            const newAmounts = [...it.amounts];
+            eus.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
+            return { ...it, amounts: newAmounts };
+          })
+        }));
       }
       return { ...prev, payableBills: prev.payableBills.filter((b) => !billIds.includes(b.id)), expenses: newExpenses };
     });
@@ -739,7 +760,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshData = fetchAllData;
 
   // SEMPRE renderizar o Provider - dataLoading indica se dados estão carregando
-  const dataLoading = loading || !data;
+  // FIX: Não travar no spinner se houve erro (data=null mas não está mais loading)
+  const dataLoading = loading;
 
   return (
     <DataContext.Provider
@@ -758,6 +780,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handleUpdateConfig, handleResetData, refreshData,
         viewKpis, refreshKpis,
         dataLoading,
+        dataError,
       }}
     >
       {children}

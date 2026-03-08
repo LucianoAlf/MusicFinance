@@ -144,6 +144,17 @@ const HEADER_MAP: Record<string, keyof RawRow> = {
   "data saida": "dataSaida",
   "data saída": "dataSaida",
   "saida": "dataSaida",
+  // emusys format
+  "aluno(a)": "nomeAluno",
+  "professores": "professor",
+  "mensalidades": "mensalidade",
+  "curso(s)": "curso",
+  "dia(s) e horario(s)": "dia",
+  // emusys exported format (relatorio_exportado.xlsx)
+  "data matric.": "dataMatricula",
+  "matriculas / situação": "situacao",
+  "matriculas / situacao": "situacao",
+  "dia(s) da semana": "dia",
 };
 
 // ─── Normalization helpers ──────────────────────────────────────────────────
@@ -155,6 +166,37 @@ function normalizeName(name: string): string {
     .split(" ")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(" ");
+}
+
+function normalizeProfessorName(name: string): string {
+  // Remove "Prof." prefix from emusys format
+  return normalizeName(name.replace(/^Prof\.?\s*/i, ""));
+}
+
+/**
+ * Parse multiple professors from emusys format (newline-separated with "Prof." prefix)
+ * Returns array of normalized professor names
+ */
+function parseMultipleProfessors(val: string): string[] {
+  if (!val || val.trim() === "") return [];
+  return val
+    .split(/[\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => normalizeProfessorName(s));
+}
+
+/**
+ * Parse multiple day/time entries from emusys format (newline-separated)
+ * Returns array of { day, time } objects
+ */
+function parseMultipleDayAndTime(val: string): { day: string; time: string }[] {
+  if (!val || val.trim() === "") return [];
+  return val
+    .split(/[\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => parseDayAndTime(s));
 }
 
 function normalizeAmount(val: string): number {
@@ -178,6 +220,8 @@ const SITUATION_MAP: Record<string, string> = {
   ativo: "Ativo",
   a: "Ativo",
   active: "Ativo",
+  "em andamento": "Ativo",
+  andamento: "Ativo",
   evadido: "Evadido",
   e: "Evadido",
   desistente: "Evadido",
@@ -187,10 +231,20 @@ const SITUATION_MAP: Record<string, string> = {
   inativo: "Trancado",
   i: "Trancado",
   cancelado: "Trancado",
+  "concluído": "Trancado",
+  concluido: "Trancado",
 };
 
 function normalizeSituation(val: string): string {
   if (!val || val.trim() === "") return "Ativo";
+
+  // Check for embedded situation in exported format (e.g., "- Em Andamento (Conclusão...)")
+  const embeddedMatch = val.match(/[-–]\s*(em andamento|conclu[íi]do|cancelado|evadido|trancado)/i);
+  if (embeddedMatch) {
+    const extracted = embeddedMatch[1].toLowerCase();
+    return SITUATION_MAP[extracted] || "Ativo";
+  }
+
   const key = val.trim().toLowerCase();
   return SITUATION_MAP[key] || "Ativo";
 }
@@ -216,6 +270,16 @@ function normalizeTime(val: string): string {
   if (/^\d{1,2}$/.test(t)) t += ":00";
   if (/^\d{1,2}:\d{1}$/.test(t)) t += "0";
   return t;
+}
+
+function parseDayAndTime(val: string): { day: string; time: string } {
+  // Parse emusys format: "Sábado às 09:00" or "Segunda-feira às 17:00"
+  if (!val || val.trim() === "") return { day: "", time: "" };
+  const match = val.trim().match(/^(.+?)\s+[àa]s?\s+(\d{1,2}:\d{2})$/i);
+  if (match) {
+    return { day: normalizeDay(match[1]), time: normalizeTime(match[2]) };
+  }
+  return { day: normalizeDay(val), time: "" };
 }
 
 function normalizeDate(val: string, year: number, month: number): string | null {
@@ -308,20 +372,84 @@ export function mapHeaders(rawData: Record<string, string>[]): RawRow[] {
 // ─── Normalize rows ─────────────────────────────────────────────────────────
 
 export function normalizeRows(rows: RawRow[], year: number, month: number): ParsedRow[] {
-  return rows.map((r) => ({
-    professorName: normalizeName(r.professor || ""),
-    professorInstruments: normalizeInstruments(r.instrumentoProf || ""),
-    studentName: normalizeName(r.nomeAluno || ""),
-    course: normalizeName(r.curso || ""),
-    situation: normalizeSituation(r.situacao || ""),
-    lessonDay: normalizeDay(r.dia || ""),
-    lessonTime: normalizeTime(r.horario || ""),
-    tuitionAmount: normalizeAmountOrNull(r.mensalidade || ""),
-    paidAmount: normalizeAmount(r.pagou || ""),
-    paidAt: normalizeDate(r.dataPgto || "", year, month),
-    enrollmentDate: normalizeDate(r.dataMatricula || "", year, month),
-    exitDate: normalizeDate(r.dataSaida || "", year, month),
-  }));
+  const result: ParsedRow[] = [];
+
+  for (const r of rows) {
+    const studentName = normalizeName(r.nomeAluno || "");
+    const course = normalizeName(r.curso || "");
+    const situation = normalizeSituation(r.situacao || "");
+    const instruments = normalizeInstruments(r.instrumentoProf || "");
+    const tuitionAmount = normalizeAmountOrNull(r.mensalidade || "");
+    const paidAmount = normalizeAmount(r.pagou || "");
+    const paidAt = normalizeDate(r.dataPgto || "", year, month);
+    const enrollmentDate = normalizeDate(r.dataMatricula || "", year, month);
+    const exitDate = normalizeDate(r.dataSaida || "", year, month);
+
+    const dayVal = r.dia || "";
+    const timeVal = r.horario || "";
+
+    // Check if emusys multi-professor/multi-schedule format
+    const professors = parseMultipleProfessors(r.professor || "");
+    const isMultiProf = professors.length > 1;
+
+    if (isMultiProf) {
+      // Emusys format with multiple professors/schedules
+      const schedules = parseMultipleDayAndTime(dayVal);
+
+      // Pair each professor with corresponding schedule (by index)
+      for (let i = 0; i < professors.length; i++) {
+        const prof = professors[i];
+        const schedule = schedules[i] || { day: "", time: "" };
+
+        result.push({
+          professorName: prof,
+          professorInstruments: instruments,
+          studentName,
+          course,
+          situation,
+          lessonDay: schedule.day,
+          lessonTime: schedule.time,
+          tuitionAmount,
+          // Split payment equally among enrollments
+          paidAmount: professors.length > 0 ? Math.round(paidAmount / professors.length * 100) / 100 : paidAmount,
+          paidAt,
+          enrollmentDate,
+          exitDate,
+        });
+      }
+    } else {
+      // Standard single-professor format
+      let lessonDay: string;
+      let lessonTime: string;
+
+      if (!timeVal && dayVal.includes("às")) {
+        // emusys combined format (single professor)
+        const parsed = parseDayAndTime(dayVal);
+        lessonDay = parsed.day;
+        lessonTime = parsed.time;
+      } else {
+        lessonDay = normalizeDay(dayVal);
+        lessonTime = normalizeTime(timeVal);
+      }
+
+      result.push({
+        professorName: professors[0] || normalizeProfessorName(r.professor || ""),
+        professorInstruments: instruments,
+        studentName,
+        course,
+        situation,
+        lessonDay,
+        lessonTime,
+        tuitionAmount,
+        paidAmount,
+        paidAt,
+        enrollmentDate,
+        exitDate,
+      });
+    }
+  }
+
+  return result;
 }
 
 // ─── Group into snapshot ────────────────────────────────────────────────────
@@ -613,41 +741,68 @@ export async function executeActions(
   const createdProfessors = new Map<string, string>();
 
   try {
-    // Phase 1: Create professors first (others depend on them)
-    for (const action of enabled.filter((a) => a.type === "CREATE_PROFESSOR")) {
-      const d = action.data;
-      const instrumentIds: string[] = [];
-      for (const instName of d.instruments || []) {
-        let inst = existingInstruments.find((i) => nameMatch(i.name, instName));
-        if (!inst) {
-          const { data: newInst } = await supabase.from("instruments").insert({ school_id: schoolId, name: instName }).select("id, name").single();
-          if (newInst) {
-            inst = newInst;
-            existingInstruments.push(newInst);
+    // Phase 1: Create professors first (others depend on them) - BATCH OPTIMIZED
+    const profActions = enabled.filter((a) => a.type === "CREATE_PROFESSOR");
+
+    if (profActions.length > 0) {
+      // 1a. Collect all unique instruments needed
+      const allInstrumentNames = new Set<string>();
+      for (const action of profActions) {
+        for (const instName of action.data.instruments || []) {
+          allInstrumentNames.add(instName);
+        }
+      }
+
+      // 1b. Batch create missing instruments
+      const missingInsts = [...allInstrumentNames].filter(
+        (name) => !existingInstruments.some((i) => nameMatch(i.name, name))
+      );
+      if (missingInsts.length > 0) {
+        const { data: newInsts } = await supabase
+          .from("instruments")
+          .insert(missingInsts.map((name) => ({ school_id: schoolId, name })))
+          .select("id, name");
+        if (newInsts) existingInstruments.push(...newInsts);
+      }
+
+      // 1c. Batch create professors
+      const profRows = profActions.map((a) => ({
+        school_id: schoolId,
+        name: a.data.name,
+        instrument: a.data.instruments?.[0] || "",
+        cost_per_student: a.data.costPerStudent ?? 0,
+      }));
+      const { data: newProfs } = await supabase
+        .from("professors")
+        .insert(profRows)
+        .select("id, name");
+
+      if (newProfs) {
+        // Map professor names to IDs
+        for (const prof of newProfs) {
+          createdProfessors.set(prof.name.toLowerCase(), prof.id);
+        }
+
+        // 1d. Batch create professor_instruments
+        const profInstRows: { professor_id: string; instrument_id: string }[] = [];
+        for (const action of profActions) {
+          const profId = createdProfessors.get(action.data.name.toLowerCase());
+          if (!profId) continue;
+          for (const instName of action.data.instruments || []) {
+            const inst = existingInstruments.find((i) => nameMatch(i.name, instName));
+            if (inst) {
+              profInstRows.push({ professor_id: profId, instrument_id: inst.id });
+            }
           }
         }
-        if (inst) instrumentIds.push(inst.id);
-      }
-
-      const { data: prof } = await supabase
-        .from("professors")
-        .insert({
-          school_id: schoolId,
-          name: d.name,
-          instrument: d.instruments?.[0] || "",
-          cost_per_student: d.costPerStudent ?? 0,
-        })
-        .select("id")
-        .single();
-
-      if (prof) {
-        createdProfessors.set(d.name.toLowerCase(), prof.id);
-        for (const instId of instrumentIds) {
-          await supabase.from("professor_instruments").insert({ professor_id: prof.id, instrument_id: instId });
+        if (profInstRows.length > 0) {
+          await supabase.from("professor_instruments").insert(profInstRows);
         }
-        stats.professorsCreated++;
+
+        stats.professorsCreated = newProfs.length;
       }
-      done++;
+
+      done += profActions.length;
       onProgress?.(done, total);
     }
 
@@ -686,78 +841,129 @@ export async function executeActions(
       onProgress?.(done, total);
     }
 
-    // Phase 5: Create students + 12 payments each
-    for (const action of enabled.filter((a) => a.type === "CREATE_STUDENT")) {
-      const d = action.data;
-      let profId = d.professorId;
-      if (!profId) profId = createdProfessors.get(d.professorName.toLowerCase());
-      if (!profId) { done++; onProgress?.(done, total); continue; }
+    // Phase 5: Create students + 12 payments each - BATCH OPTIMIZED
+    const studentActions = enabled.filter((a) => a.type === "CREATE_STUDENT");
 
-      let instId: string | null = null;
-      if (d.course) {
-        const inst = existingInstruments.find((i) => nameMatch(i.name, d.course));
-        if (inst) instId = inst.id;
+    if (studentActions.length > 0) {
+      // 5.0: Generate shared person_id for multi-course students (same name, multiple enrollments)
+      const studentNameCount = new Map<string, number>();
+      for (const action of studentActions) {
+        const nameKey = action.data.name.toLowerCase();
+        studentNameCount.set(nameKey, (studentNameCount.get(nameKey) || 0) + 1);
       }
 
-      const tuitionVal = d.tuitionAmount || defaultTuition;
+      // Generate UUID for multi-course students that don't already have a personId
+      const sharedPersonIds = new Map<string, string>();
+      for (const [nameKey, count] of studentNameCount) {
+        if (count > 1) {
+          // Check if any action for this name already has a personId
+          const existingPersonId = studentActions.find(
+            (a) => a.data.name.toLowerCase() === nameKey && a.data.personId
+          )?.data.personId;
+          sharedPersonIds.set(nameKey, existingPersonId || crypto.randomUUID());
+        }
+      }
 
-      const { data: student } = await supabase
-        .from("students")
-        .insert({
-          school_id: schoolId,
-          professor_id: profId,
-          name: d.name,
-          situation: d.situation || "Ativo",
-          lesson_day: d.lessonDay || null,
-          lesson_time: d.lessonTime || null,
-          tuition_amount: tuitionVal,
-          enrollment_date: d.enrollmentDate || null,
-          exit_date: d.exitDate || null,
-          instrument_id: instId,
-          person_id: d.personId || undefined,
-        })
-        .select("id, person_id")
-        .single();
+      // Process in chunks of 50 for better performance
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < studentActions.length; i += CHUNK_SIZE) {
+        const chunk = studentActions.slice(i, i + CHUNK_SIZE);
 
-      if (student) {
-        // Create 12 payments PENDING
-        const payRows = [];
-        for (let m = 1; m <= 12; m++) {
-          payRows.push({
-            student_id: student.id,
+        // 5a. Prepare student rows
+        const studentRows = chunk.map((action) => {
+          const d = action.data;
+          let profId = d.professorId;
+          if (!profId) profId = createdProfessors.get(d.professorName.toLowerCase());
+
+          let instId: string | null = null;
+          if (d.course) {
+            const inst = existingInstruments.find((ii) => nameMatch(ii.name, d.course));
+            if (inst) instId = inst.id;
+          }
+
+          // Use shared person_id for multi-course students, or generate new one
+          const nameKey = d.name.toLowerCase();
+          const personId = d.personId || sharedPersonIds.get(nameKey) || crypto.randomUUID();
+
+          return {
             school_id: schoolId,
-            year,
-            month: m,
-            amount: tuitionVal,
-            status: "PENDING",
-          });
-        }
-        await supabase.from("payments").insert(payRows);
+            professor_id: profId || null,
+            name: d.name,
+            situation: d.situation || "Ativo",
+            lesson_day: d.lessonDay || null,
+            lesson_time: d.lessonTime || null,
+            tuition_amount: d.tuitionAmount || defaultTuition,
+            enrollment_date: d.enrollmentDate || null,
+            exit_date: d.exitDate || null,
+            instrument_id: instId,
+            person_id: personId,
+          };
+        }).filter((r) => r.professor_id !== null);
 
-        // If this month has payment info, update it
-        if (d.paidAmount > 0) {
-          await supabase
-            .from("payments")
-            .update({
-              status: "PAID",
-              amount: d.paidAmount,
-              paid_at: d.paidAt || `${year}-${String(month).padStart(2, "0")}-01`,
-            })
-            .eq("student_id", student.id)
-            .eq("year", year)
-            .eq("month", month);
-          stats.paymentsConfirmed++;
+        if (studentRows.length === 0) {
+          done += chunk.length;
+          onProgress?.(done, total);
+          continue;
         }
 
-        // If multi-course and no person_id was inherited, share it with siblings
-        if (d.isMultiCourse && !d.personId && student.person_id) {
-          createdProfessors.set(`person:${d.name.toLowerCase()}`, student.person_id);
+        // 5b. Batch insert students
+        const { data: newStudents } = await supabase
+          .from("students")
+          .insert(studentRows)
+          .select("id, name, tuition_amount");
+
+        if (newStudents && newStudents.length > 0) {
+          // 5c. Batch create all payments for all students
+          const allPayments: { student_id: string; school_id: string; year: number; month: number; amount: number; status: string }[] = [];
+          for (const student of newStudents) {
+            for (let m = 1; m <= 12; m++) {
+              allPayments.push({
+                student_id: student.id,
+                school_id: schoolId,
+                year,
+                month: m,
+                amount: student.tuition_amount || defaultTuition,
+                status: "PENDING",
+              });
+            }
+          }
+          await supabase.from("payments").insert(allPayments);
+
+          // 5d. Update payments for students who already paid this month
+          const studentNameToId = new Map(newStudents.map((s) => [s.name.toLowerCase(), s.id]));
+          const paidUpdates: { studentId: string; amount: number; paidAt: string }[] = [];
+
+          for (const action of chunk) {
+            const d = action.data;
+            if (d.paidAmount > 0) {
+              const studentId = studentNameToId.get(d.name.toLowerCase());
+              if (studentId) {
+                paidUpdates.push({
+                  studentId,
+                  amount: d.paidAmount,
+                  paidAt: d.paidAt || `${year}-${String(month).padStart(2, "0")}-01`,
+                });
+              }
+            }
+          }
+
+          // Update paid payments one by one (necessary due to different values)
+          for (const upd of paidUpdates) {
+            await supabase
+              .from("payments")
+              .update({ status: "PAID", amount: upd.amount, paid_at: upd.paidAt })
+              .eq("student_id", upd.studentId)
+              .eq("year", year)
+              .eq("month", month);
+            stats.paymentsConfirmed++;
+          }
+
+          stats.studentsCreated += newStudents.length;
         }
 
-        stats.studentsCreated++;
+        done += chunk.length;
+        onProgress?.(done, total);
       }
-      done++;
-      onProgress?.(done, total);
     }
 
     // Phase 6: Transfers

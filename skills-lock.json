@@ -1656,6 +1656,11 @@
       "sourceType": "github",
       "computedHash": "c88178d861802fa836be54e377e82bb67899b6c378807679a1feecd21bf63cb8"
     },
+    "tailwind-v4": {
+      "source": "existential-birds/beagle",
+      "sourceType": "github",
+      "computedHash": "e18cf0c165d60d6e3b54b6798b9365ce9150ecb73cd183ffa6ebca4897cce13d"
+    },
     "task-coordination-strategies": {
       "source": "wshobson/agents",
       "sourceType": "github",

@@ -113,6 +113,16 @@ export const Professors = () => {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
+  // Bulk delete states (students)
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [bulkDeleteSelected, setBulkDeleteSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Bulk delete states (professors)
+  const [bulkProfDeleteMode, setBulkProfDeleteMode] = useState(false);
+  const [bulkProfSelected, setBulkProfSelected] = useState<Set<string>>(new Set());
+  const [bulkProfDeleting, setBulkProfDeleting] = useState(false);
+
   // Add professor form
   const [npName, setNpName] = useState("");
   const [npCost, setNpCost] = useState("100");
@@ -332,6 +342,79 @@ export const Professors = () => {
     });
   };
 
+  // Bulk delete functions
+  const toggleDeleteAll = (studentIds: string[]) => {
+    if (bulkDeleteSelected.size === studentIds.length) {
+      setBulkDeleteSelected(new Set());
+    } else {
+      setBulkDeleteSelected(new Set(studentIds));
+    }
+  };
+
+  const toggleDeleteOne = (studentId: string) => {
+    setBulkDeleteSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentId)) next.delete(studentId);
+      else next.add(studentId);
+      return next;
+    });
+  };
+
+  const confirmBulkDelete = () => {
+    if (!selProf || bulkDeleteSelected.size === 0) return;
+
+    confirm({
+      title: "Excluir Alunos",
+      message: `Tem certeza que deseja excluir ${bulkDeleteSelected.size} aluno(s)? Esta ação não pode ser desfeita.`,
+      confirmLabel: `Excluir ${bulkDeleteSelected.size}`,
+      variant: "danger",
+      onConfirm: async () => {
+        setBulkDeleting(true);
+        for (const studentId of bulkDeleteSelected) {
+          await handleDeleteStudent(selProf, studentId);
+        }
+        setBulkDeleting(false);
+        setBulkDeleteMode(false);
+        setBulkDeleteSelected(new Set());
+      },
+    });
+  };
+
+  // Bulk delete functions (professors)
+  const toggleProfDeleteOne = (profId: string) => {
+    setBulkProfSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(profId)) next.delete(profId);
+      else next.add(profId);
+      return next;
+    });
+  };
+
+  const confirmBulkProfDelete = () => {
+    if (bulkProfSelected.size === 0 || !data) return;
+
+    const totalStudents = data.professors
+      .filter(p => bulkProfSelected.has(p.id))
+      .reduce((sum, p) => sum + p.students.length, 0);
+
+    confirm({
+      title: "Excluir Professores",
+      message: `Tem certeza que deseja excluir ${bulkProfSelected.size} professor(es) e seus ${totalStudents} aluno(s)? Esta ação não pode ser desfeita.`,
+      confirmLabel: `Excluir ${bulkProfSelected.size}`,
+      variant: "danger",
+      onConfirm: async () => {
+        setBulkProfDeleting(true);
+        for (const profId of bulkProfSelected) {
+          await handleDeleteProfessor(profId);
+        }
+        setBulkProfDeleting(false);
+        setBulkProfDeleteMode(false);
+        setBulkProfSelected(new Set());
+        setSelProf(null);
+      },
+    });
+  };
+
   const openEditProf = (p: { id: string; name: string; costPerStudent: number }) => {
     setEditProf(p.id);
     setEpName(p.name);
@@ -379,7 +462,22 @@ export const Professors = () => {
           </div>
           <MonthSelector curMo={curMo} setCurMo={setCurMo} />
         </div>
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => {
+              setBulkProfDeleteMode(!bulkProfDeleteMode);
+              setBulkProfSelected(new Set());
+            }}
+            className={cn(
+              "p-2.5 rounded-lg transition-all border cursor-pointer",
+              bulkProfDeleteMode
+                ? "bg-accent-red/10 text-accent-red border-accent-red/30"
+                : "bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red border-border-secondary"
+            )}
+            title="Modo de exclusão múltipla de professores"
+          >
+            <Trash2 size={14} />
+          </button>
           <button onClick={() => setShowAddProf(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-all border-none cursor-pointer">
             <Plus size={14} /> Novo Professor
           </button>
@@ -416,14 +514,24 @@ export const Professors = () => {
             const trendUp = trendProf != null && trendProf >= 0;
 
             return (
-              <div key={p.id} onClick={() => { setSelProf(p.id); setSelPay(null); }}
+              <div key={p.id} onClick={() => { if (!bulkProfDeleteMode) { setSelProf(p.id); setSelPay(null); } }}
                 className={cn("rounded-xl p-3 cursor-pointer transition-all border",
-                  selProf === p.id 
-                    ? "bg-surface-tertiary border-border-hover ring-1 ring-border-hover" 
-                    : "bg-surface-secondary border-border-primary hover:bg-surface-tertiary/50 hover:border-border-secondary"
+                  selProf === p.id
+                    ? "bg-surface-tertiary border-border-hover ring-1 ring-border-hover"
+                    : "bg-surface-secondary border-border-primary hover:bg-surface-tertiary/50 hover:border-border-secondary",
+                  bulkProfDeleteMode && bulkProfSelected.has(p.id) && "ring-1 ring-accent-red border-accent-red/30"
                 )}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
+                    {bulkProfDeleteMode && (
+                      <input
+                        type="checkbox"
+                        checked={bulkProfSelected.has(p.id)}
+                        onChange={(e) => { e.stopPropagation(); toggleProfDeleteOne(p.id); }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="accent-accent-red w-4 h-4 cursor-pointer shrink-0"
+                      />
+                    )}
                     <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden">
                       <img src={p.avatarUrl || getAvatar(p.name)} alt="Avatar" className="w-full h-full object-cover" />
                     </div>
@@ -481,8 +589,23 @@ export const Professors = () => {
                   <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-[11px] font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">
                     <UserPlus size={14} /> Novo Aluno
                   </button>
-                  <button onClick={() => removeProf(prof.id)} className="p-2 rounded-lg bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-all border border-border-secondary cursor-pointer">
+                  <button
+                    onClick={() => {
+                      setBulkDeleteMode(!bulkDeleteMode);
+                      setBulkDeleteSelected(new Set());
+                    }}
+                    className={cn(
+                      "p-2 rounded-lg transition-all border cursor-pointer",
+                      bulkDeleteMode
+                        ? "bg-accent-red/10 text-accent-red border-accent-red/30"
+                        : "bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red border-border-secondary"
+                    )}
+                    title="Modo de exclusão múltipla"
+                  >
                     <Trash2 size={14} />
+                  </button>
+                  <button onClick={() => removeProf(prof.id)} className="p-2 rounded-lg bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-all border border-border-secondary cursor-pointer" title="Remover professor">
+                    <UserMinus size={14} />
                   </button>
                 </div>
               </div>
@@ -603,6 +726,16 @@ export const Professors = () => {
                 <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 z-10 bg-surface-secondary">
                     <tr>
+                      {bulkDeleteMode && (
+                        <th className="pb-2 px-2 w-10 border-b border-border-primary">
+                          <input
+                            type="checkbox"
+                            checked={bulkDeleteSelected.size === prof.students.length && prof.students.length > 0}
+                            onChange={() => toggleDeleteAll(prof.students.map(s => s.id))}
+                            className="accent-accent-red w-3.5 h-3.5 cursor-pointer"
+                          />
+                        </th>
+                      )}
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-2 border-b border-border-primary font-medium">Nome</th>
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-16 border-b border-border-primary font-medium">Curso</th>
                       <th className="font-sans text-[10px] uppercase tracking-wider text-text-tertiary pb-2 px-1 w-14 text-center border-b border-border-primary font-medium">Perm.</th>
@@ -620,6 +753,16 @@ export const Professors = () => {
                       return (
                         <React.Fragment key={s.id}>
                           <tr className={cn("border-t border-border-primary transition-colors hover:bg-surface-tertiary", isInactive && "opacity-60")}>
+                            {bulkDeleteMode && (
+                              <td className="py-2.5 px-2">
+                                <input
+                                  type="checkbox"
+                                  checked={bulkDeleteSelected.has(s.id)}
+                                  onChange={() => toggleDeleteOne(s.id)}
+                                  className="accent-accent-red w-3.5 h-3.5 cursor-pointer"
+                                />
+                              </td>
+                            )}
                             <td className="py-2.5 px-2">
                               <button
                                 onClick={() => openEditStudent(s)}
@@ -665,7 +808,7 @@ export const Professors = () => {
                           </tr>
                           {selPay === s.id && (
                             <tr>
-                              <td colSpan={8}>
+                              <td colSpan={bulkDeleteMode ? 10 : 9}>
                                 <div className="p-4 my-2 rounded-xl border border-border-secondary bg-surface-primary">
                                   <p className="text-[10px] font-semibold mb-3 uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
                                     <Calendar size={12} /> Pagamentos {data.config.year}
@@ -1207,6 +1350,53 @@ export const Professors = () => {
         variant={confirmState.variant}
         onConfirm={confirmState.onConfirm}
       />
+
+      {/* Bulk Delete Floating Bar */}
+      {/* Bulk Delete Floating Bar (Students) */}
+      {bulkDeleteMode && bulkDeleteSelected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-accent-red text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 z-50">
+          <span className="text-sm font-medium">{bulkDeleteSelected.size} aluno(s) selecionado(s)</span>
+          <button
+            onClick={confirmBulkDelete}
+            disabled={bulkDeleting}
+            className="bg-white text-accent-red px-4 py-1.5 rounded-lg font-semibold text-sm hover:bg-red-50 disabled:opacity-50 transition-colors border-none cursor-pointer"
+          >
+            {bulkDeleting ? "Excluindo..." : "Excluir"}
+          </button>
+          <button
+            onClick={() => {
+              setBulkDeleteMode(false);
+              setBulkDeleteSelected(new Set());
+            }}
+            className="text-red-100 hover:text-white transition-colors border-none bg-transparent cursor-pointer p-1"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk Delete Floating Bar (Professors) */}
+      {bulkProfDeleteMode && bulkProfSelected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-accent-red text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 z-50">
+          <span className="text-sm font-medium">{bulkProfSelected.size} professor(es) selecionado(s)</span>
+          <button
+            onClick={confirmBulkProfDelete}
+            disabled={bulkProfDeleting}
+            className="bg-white text-accent-red px-4 py-1.5 rounded-lg font-semibold text-sm hover:bg-red-50 disabled:opacity-50 transition-colors border-none cursor-pointer"
+          >
+            {bulkProfDeleting ? "Excluindo..." : "Excluir"}
+          </button>
+          <button
+            onClick={() => {
+              setBulkProfDeleteMode(false);
+              setBulkProfSelected(new Set());
+            }}
+            className="text-red-100 hover:text-white transition-colors border-none bg-transparent cursor-pointer p-1"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

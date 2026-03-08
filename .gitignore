@@ -10,3 +10,4 @@ supabase/.temp/
 .claude/
 .agents/
 .mcp.json
+mcp.json

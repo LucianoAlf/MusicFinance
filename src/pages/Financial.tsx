@@ -74,11 +74,12 @@ export const Financial = () => {
     handleUpdateRevenue(categoryId, curMo, Number(v) || 0);
   };
 
-  const confirmAddRev = async () => {
+  const confirmAddRev = () => {
     if (!nrName.trim()) return;
-    await handleAddRevenueCategory(nrName.trim());
+    const name = nrName.trim();
     setShowAddRev(false);
     setNrName("");
+    handleAddRevenueCategory(name);
   };
 
   const removeRev = (id: string) => {
@@ -95,10 +96,11 @@ export const Financial = () => {
     setEditRev({ id: rc.id, name: rc.name });
   };
 
-  const saveEditRev = async () => {
+  const saveEditRev = () => {
     if (!editRev || !editRev.name.trim()) return;
-    await handleUpdateRevenueCategory(editRev.id, editRev.name.trim());
+    const { id, name } = editRev;
     setEditRev(null);
+    handleUpdateRevenueCategory(id, name.trim());
   };
 
   const updateExp = (ci: number, ii: number, v: string) => {
@@ -107,13 +109,15 @@ export const Financial = () => {
     if (ei.id) handleUpdateExpense(cc.id, ei.id, curMo, Number(v) || 0);
   };
 
-  const confirmAddExp = async () => {
+  const confirmAddExp = () => {
     if (!neN.trim() || showAddExp === null) return;
     const cc = data.expenses[showAddExp];
-    await handleAddExpenseItem(cc.id, { name: neN.trim(), type: neT });
+    const name = neN.trim();
+    const type = neT;
     setShowAddExp(null);
     setNeN("");
     setNeT("F");
+    handleAddExpenseItem(cc.id, { name, type });
   };
 
   const removeExp = (ci: number, ii: number) => {
@@ -130,12 +134,14 @@ export const Financial = () => {
     });
   };
 
-  const confirmAddCC = async () => {
+  const confirmAddCC = () => {
     if (!ncName.trim()) return;
-    await handleAddCostCenter({ name: ncName.trim(), color: ncColor });
+    const name = ncName.trim();
+    const color = ncColor;
     setShowAddCC(false);
     setNcName("");
     setNcColor("#0ea5e9");
+    handleAddCostCenter({ name, color });
   };
 
   const removeCC = (id: string) => {
@@ -154,15 +160,16 @@ export const Financial = () => {
     setEcColor(cc.color);
   };
 
-  const saveEditCC = async () => {
+  const saveEditCC = () => {
     if (!editCC) return;
     const cc = data.expenses.find(c => c.id === editCC);
     if (!cc) return;
     const updates: { name?: string; color?: string } = {};
     if (ecName.trim() && ecName.trim() !== cc.name) updates.name = ecName.trim();
     if (ecColor && ecColor !== cc.color) updates.color = ecColor;
-    if (Object.keys(updates).length > 0) await handleUpdateCostCenter(editCC, updates);
+    const id = editCC;
     setEditCC(null);
+    if (Object.keys(updates).length > 0) handleUpdateCostCenter(id, updates);
   };
 
   const openEditEI = (ccId: string, ei: { id?: string; name: string; type: "F" | "V" }) => {
@@ -172,7 +179,7 @@ export const Financial = () => {
     setEiType(ei.type);
   };
 
-  const saveEditEI = async () => {
+  const saveEditEI = () => {
     if (!editEI) return;
     const cc = data.expenses.find(c => c.id === editEI.ccId);
     const ei = cc?.items.find(it => it.id === editEI.eiId);
@@ -180,8 +187,9 @@ export const Financial = () => {
     const updates: { name?: string; type?: "F" | "V" } = {};
     if (eiName.trim() && eiName.trim() !== ei.name) updates.name = eiName.trim();
     if (eiType !== ei.type) updates.type = eiType;
-    if (Object.keys(updates).length > 0) await handleUpdateExpenseItem(editEI.ccId, editEI.eiId, updates);
+    const { ccId, eiId } = editEI;
     setEditEI(null);
+    if (Object.keys(updates).length > 0) handleUpdateExpenseItem(ccId, eiId, updates);
   };
 
   const lbl = "text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider";

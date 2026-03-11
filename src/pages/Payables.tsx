@@ -179,9 +179,9 @@ export const Payables = () => {
       }
     }
 
-    await handleSaveBills(billsToCreate, expenseUpdates);
     setShowModal(false);
     resetForm();
+    handleSaveBills(billsToCreate, expenseUpdates);
   };
 
   const resetForm = () => {

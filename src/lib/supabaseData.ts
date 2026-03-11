@@ -399,7 +399,7 @@ export async function createBills(schoolId: string, bills: Array<{
     school_id: schoolId,
     expense_item_id: b.expenseItemId || null,
     description: b.description,
-    bill_type: b.billType,
+    bill_type: b.billType === "RECURRENT" ? "RECURRENT_FIXED" : b.billType,
     amount: b.amount,
     due_date: b.dueDate,
     total_installments: b.totalInstallments || null,
@@ -434,7 +434,7 @@ export async function updateBill(billId: string, data: {
   if (data.paidAt !== undefined) update.paid_at = data.paidAt;
   if (data.description !== undefined) update.description = data.description;
   if (data.expenseItemId !== undefined) update.expense_item_id = data.expenseItemId;
-  if (data.billType !== undefined) update.bill_type = data.billType;
+  if (data.billType !== undefined) update.bill_type = data.billType === "RECURRENT" ? "RECURRENT_FIXED" : data.billType;
   if (data.competenceMonth !== undefined) update.competence_month = data.competenceMonth;
   if (data.competenceYear !== undefined) update.competence_year = data.competenceYear;
   return supabase.from("bills").update(update).eq("id", billId);
@@ -449,7 +449,7 @@ export async function getRecurrentBillsForYear(schoolId: string, year: number) {
     .from("bills")
     .select("id, expense_item_id, description, bill_type, amount, group_id, competence_month, competence_year")
     .eq("school_id", schoolId)
-    .eq("bill_type", "RECURRENT")
+    .in("bill_type", ["RECURRENT_FIXED", "RECURRENT_VARIABLE"])
     .gte("due_date", `${year}-01-01`)
     .lte("due_date", `${year}-12-31`);
 }
@@ -478,7 +478,7 @@ export async function replicateRecurrentBills(schoolId: string, fromYear: number
         school_id: schoolId,
         expense_item_id: template.expense_item_id,
         description: template.description,
-        bill_type: "RECURRENT",
+        bill_type: "RECURRENT_FIXED",
         amount: template.amount,
         due_date: `${toYear}-${String(m + 1).padStart(2, "0")}-${day}`,
         status: "PENDING",

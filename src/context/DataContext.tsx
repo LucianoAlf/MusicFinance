@@ -775,6 +775,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handleAddInstrument, handleAddProfessorInstrument, handleRemoveProfessorInstrument,
         handleAddCostCenter, handleUpdateCostCenter, handleDeleteCostCenter,
         handleAddExpenseItem, handleUpdateExpenseItem, handleDeleteExpenseItem, handleUpdateExpense,
+        handleAddRevenueCategory, handleUpdateRevenueCategory, handleDeleteRevenueCategory,
         handleUpdateRevenue,
         handleSaveBills, handleUpdateBill, handleDeleteBills, handleToggleBillStatus,
         handleUpdateConfig, handleResetData, refreshData,

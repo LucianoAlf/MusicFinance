@@ -31,6 +31,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   FileText,
+  ListX,
 } from "lucide-react";
 
 const SITUATIONS = ["Ativo", "Evadido", "Trancado"] as const;
@@ -589,6 +590,9 @@ export const Professors = () => {
                   <button onClick={() => setShowAddStud(prof.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-btn-bg text-primary-btn-text text-[11px] font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer">
                     <UserPlus size={14} /> Novo Aluno
                   </button>
+                  <button onClick={() => removeProf(prof.id)} className="p-2 rounded-lg bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-all border border-border-secondary cursor-pointer" title="Remover professor">
+                    <Trash2 size={14} />
+                  </button>
                   <button
                     onClick={() => {
                       setBulkDeleteMode(!bulkDeleteMode);
@@ -598,14 +602,11 @@ export const Professors = () => {
                       "p-2 rounded-lg transition-all border cursor-pointer",
                       bulkDeleteMode
                         ? "bg-accent-red/10 text-accent-red border-accent-red/30"
-                        : "bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red border-border-secondary"
+                        : "bg-transparent text-text-tertiary hover:bg-surface-tertiary hover:text-text-secondary border-border-secondary"
                     )}
-                    title="Modo de exclusão múltipla"
+                    title="Modo de exclusão múltipla de alunos"
                   >
-                    <Trash2 size={14} />
-                  </button>
-                  <button onClick={() => removeProf(prof.id)} className="p-2 rounded-lg bg-transparent text-text-tertiary hover:bg-accent-red/10 hover:text-accent-red transition-all border border-border-secondary cursor-pointer" title="Remover professor">
-                    <UserMinus size={14} />
+                    <ListX size={14} />
                   </button>
                 </div>
               </div>
@@ -906,7 +907,10 @@ export const Professors = () => {
                 }}
               />
               <button
-                onClick={async () => {
+                type="button"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   if (npNewInst.trim()) {
                     const created = await handleAddInstrument(npNewInst.trim());
                     if (created) { setNpInstIds(prev => [...prev, created.id]); setNpNewInst(""); }
@@ -1230,7 +1234,10 @@ export const Professors = () => {
                     }}
                   />
                   <button
-                    onClick={async () => {
+                    type="button"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       if (epNewInst.trim()) {
                         const inst = await handleAddInstrument(epNewInst.trim());
                         if (inst) { await handleAddProfessorInstrument(editProf, inst.id); setEpNewInst(""); }

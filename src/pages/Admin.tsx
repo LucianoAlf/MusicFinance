@@ -23,82 +23,87 @@ interface Invite {
   created_at: string;
 }
 
+/** Wrapper com timeout para promises (Edge Functions podem travar no cold start) */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label}: timeout ${ms}ms`)), ms)),
+  ]);
+}
+
 export const Admin: React.FC = () => {
   const { session, isSuperadmin, user } = useAuth();
-  const accessToken = session?.access_token ?? "";
   const [mentees, setMentees] = useState<Mentee[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
+  const [loadingMentees, setLoadingMentees] = useState(true);
+  const [loadingInvites, setLoadingInvites] = useState(true);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const lastTokenRef = useRef("");
-  const loadingRef = useRef(false);
+  const mountedRef = useRef(true);
 
-  const fetchMentees = useCallback(async (token: string) => {
-    if (!token) { setMentees([]); return; }
+  /** Busca token fresco */
+  const getFreshToken = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || session?.access_token || "";
+  }, [session]);
 
+  const fetchMentees = useCallback(async () => {
+    setLoadingMentees(true);
     try {
-      const res = await supabase.functions.invoke("list-mentees", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const token = await getFreshToken();
+      if (!token) { setMentees([]); return; }
 
-      // DEBUG temporário - verificar resposta completa
-      console.log("[Admin] list-mentees response:", JSON.stringify({ error: res.error, dataType: typeof res.data, dataIsArray: Array.isArray(res.data), dataLength: Array.isArray(res.data) ? res.data.length : 'N/A', data: res.data }));
+      const res = await withTimeout(
+        supabase.functions.invoke("list-mentees", { headers: { Authorization: `Bearer ${token}` } }),
+        20000, "list-mentees"
+      );
 
-      if (res.error) {
-        const errMsg = String(res.error?.message || res.error || "");
-        if (errMsg.includes("401") || errMsg.includes("Unauthorized")) {
-          console.warn("[Admin] Token expirado, mantendo lista anterior");
-          return;
-        }
-        console.error("[Admin] Erro:", res.error);
-        return;
-      }
-
+      if (!mountedRef.current) return;
+      if (res.error) { console.error("[Admin] list-mentees:", res.error); return; }
       setMentees(res.data || []);
     } catch (err) {
-      console.error("[Admin] Erro ao carregar mentorados:", err);
+      console.error("[Admin] fetchMentees:", err);
+      // Retry uma vez após timeout (cold start)
+      try {
+        const token = await getFreshToken();
+        const res = await withTimeout(
+          supabase.functions.invoke("list-mentees", { headers: { Authorization: `Bearer ${token}` } }),
+          15000, "list-mentees-retry"
+        );
+        if (mountedRef.current && !res.error) setMentees(res.data || []);
+      } catch { /* desiste após 2 tentativas */ }
+    } finally {
+      if (mountedRef.current) setLoadingMentees(false);
     }
-  }, []);
+  }, [getFreshToken]);
 
   const fetchInvites = useCallback(async () => {
+    setLoadingInvites(true);
     try {
       const { data } = await supabase
         .from("invites")
         .select("id, email, status, accepted_at, created_at")
         .order("created_at", { ascending: false });
-      setInvites(data || []);
+      if (mountedRef.current) setInvites(data || []);
     } catch {
-      setInvites([]);
+      if (mountedRef.current) setInvites([]);
+    } finally {
+      if (mountedRef.current) setLoadingInvites(false);
     }
   }, []);
 
-  const refreshData = useCallback(async () => {
-    await Promise.allSettled([fetchMentees(accessToken), fetchInvites()]);
-  }, [fetchMentees, fetchInvites, accessToken]);
-
-  const loadAll = useCallback(async () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLoadingData(true);
-    try {
-      await refreshData();
-    } finally {
-      setLoadingData(false);
-      loadingRef.current = false;
-    }
-  }, [refreshData]);
-
   useEffect(() => {
-    if (!isSuperadmin || !accessToken || !user?.id) return;
-    if (lastTokenRef.current === accessToken) return;
-    lastTokenRef.current = accessToken;
-    loadAll();
-  }, [loadAll, isSuperadmin, accessToken, user?.id]);
+    mountedRef.current = true;
+    if (!isSuperadmin || !user?.id) return;
+    // Invites carregam instantaneamente, mentorados no background
+    fetchInvites();
+    fetchMentees();
+    return () => { mountedRef.current = false; };
+  }, [isSuperadmin, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!openMenu) return;
@@ -119,19 +124,21 @@ export const Admin: React.FC = () => {
     setFeedback(null);
 
     try {
-      // Refreshar token antes de chamar a Edge Function para evitar 401
-      const { data: sessionData } = await supabase.auth.getSession();
-      const freshToken = sessionData?.session?.access_token || accessToken;
-      const res = await supabase.functions.invoke("invite-user", {
-        body: { email: trimmed },
-        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : undefined,
-      });
+      const token = await getFreshToken();
+      const res = await withTimeout(
+        supabase.functions.invoke("invite-user", {
+          body: { email: trimmed },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
+        25000, "invite-user"
+      );
       if (res.error) throw new Error(res.error.message || "Erro ao enviar convite");
       if (res.data?.error) throw new Error(res.data.error);
 
       setFeedback({ type: "success", msg: `Convite enviado para ${trimmed}` });
       setEmail("");
-      await refreshData();
+      fetchInvites();
+      fetchMentees();
     } catch (err: any) {
       setFeedback({ type: "error", msg: err.message || "Erro ao enviar convite" });
     } finally {
@@ -148,12 +155,14 @@ export const Admin: React.FC = () => {
     setActionLoading(userId);
     setFeedback(null);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const freshToken = sessionData?.session?.access_token || accessToken;
-      const res = await supabase.functions.invoke("manage-mentee", {
-        body: { action, userId },
-        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : undefined,
-      });
+      const token = await getFreshToken();
+      const res = await withTimeout(
+        supabase.functions.invoke("manage-mentee", {
+          body: { action, userId },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
+        20000, "manage-mentee"
+      );
       if (res.error) throw new Error(res.error.message || "Erro na operacao");
       if (res.data?.error) throw new Error(res.data.error);
 
@@ -165,7 +174,8 @@ export const Admin: React.FC = () => {
       setFeedback({ type: "success", msg: msgs[action] });
       setConfirmDelete(null);
       setOpenMenu(null);
-      await refreshData();
+      fetchInvites();
+      fetchMentees();
     } catch (err: any) {
       setFeedback({ type: "error", msg: err.message || "Erro ao executar acao" });
     } finally {
@@ -248,7 +258,7 @@ export const Admin: React.FC = () => {
           <Users size={14} />
           Mentorados Ativos ({activeMentees.length})
         </h3>
-        {loadingData ? (
+        {loadingMentees ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 size={20} className="animate-spin text-text-tertiary" />
           </div>

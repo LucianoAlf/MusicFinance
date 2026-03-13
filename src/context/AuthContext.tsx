@@ -236,7 +236,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (s?.user) {
         setSession(s);
         setUser(s.user);
-        if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        if (event === "SIGNED_IN") {
           await loadUserData(s.user.id);
         }
       }

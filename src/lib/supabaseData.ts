@@ -308,9 +308,9 @@ export async function deleteStudent(studentId: string) {
 
 /** Insere vários pagamentos de uma vez (batch) — para alunos novos */
 export async function batchInsertPayments(rows: Array<{ studentId: string; schoolId: string; year: number; month: number; amount: number; status: string }>) {
-  if (rows.length === 0) return { error: null };
+  if (rows.length === 0) return { data: null, error: null };
   const insertRows = rows.map(r => ({ student_id: r.studentId, school_id: r.schoolId, year: r.year, month: r.month, amount: r.amount, status: r.status }));
-  return supabase.from("payments").insert(insertRows);
+  return supabase.from("payments").insert(insertRows).select("id");
 }
 
 export async function upsertPayment(data: { studentId: string; schoolId: string; year: number; month: number; amount: number | null; status: string; paidAt?: string | null }) {

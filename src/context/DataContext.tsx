@@ -314,23 +314,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => {
     if (!data || !schoolId) return;
     markSaving();
-    const tuitionVal = d.tuition || data.config.tuition;
-    const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
-    const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, paymentMethod: d.paymentMethod });
-    if (error || !row) { markError(); return; }
+    try {
+      const tuitionVal = d.tuition || data.config.tuition;
+      const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
+      const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, paymentMethod: d.paymentMethod });
+      if (error || !row) { markError(); return; }
 
-    const payments12: (Payment | null)[] = [];
-    const paymentInserts = [];
-    for (let m = 0; m < 12; m++) {
-      paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PENDING" });
-      payments12.push({ amount: tuitionVal, status: "PENDING" as PaymentStatus });
+      const payments12: (Payment | null)[] = [];
+      const paymentInserts = [];
+      for (let m = 0; m < 12; m++) {
+        paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PENDING" });
+        payments12.push({ amount: tuitionVal, status: "PENDING" as PaymentStatus });
+      }
+      const { error: payErr } = await apiBatchInsertPayments(paymentInserts);
+      if (payErr) console.error("[DataCtx] batchInsertPayments:", payErr);
+
+      const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
+      const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
+      setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
+      markSaved();
+    } catch (err) {
+      console.error("[DataCtx] handleAddStudent falhou:", err);
+      markError();
     }
-    await apiBatchInsertPayments(paymentInserts);
-
-    const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
-    const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
-    setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
-    markSaved();
   };
 
   const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => {

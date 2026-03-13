@@ -241,6 +241,8 @@ export async function updateProfessor(profId: string, data: { name?: string; cos
 }
 
 export async function deleteProfessor(profId: string) {
+  // Deletar alunos do professor primeiro (FK é SET NULL, não CASCADE)
+  await supabase.from("students").delete().eq("professor_id", profId);
   return supabase.from("professors").delete().eq("id", profId);
 }
 

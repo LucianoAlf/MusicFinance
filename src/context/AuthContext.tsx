@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
-import { markPasswordSet, hasPasswordSet } from "../components/SetPasswordModal";
+import { markPasswordSet } from "../components/SetPasswordModal";
 
 export interface School {
   id: string;
@@ -28,9 +28,6 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   createSchool: (name: string, tuition?: number, passport?: number, year?: number) => Promise<{ error?: string }>;
   refreshSchools: () => Promise<void>;
-  /** true quando o usuário entrou via magic link e ainda não definiu senha */
-  needsPassword: boolean;
-  clearNeedsPassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,10 +67,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [schoolsLoaded, setSchoolsLoaded] = useState(false);
   // Inicializar selectedSchool do localStorage SINCRONAMENTE para evitar flash
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(getStoredSchool);
-
-  // Flag: usuário entrou via magic link e precisa definir senha
-  const [needsPassword, setNeedsPassword] = useState(false);
-  const clearNeedsPassword = useCallback(() => setNeedsPassword(false), []);
 
   // Mutex para impedir execução paralela de loadUserData
   const loadingUserData = useRef(false);
@@ -245,11 +238,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(s);
         setUser(s.user);
         if (event === "SIGNED_IN") {
-          // Se SIGNED_IN veio sem signInWithPassword → é magic link/invite
-          // signingIn.current só é true durante signInWithPassword
-          if (!hasPasswordSet(s.user.id)) {
-            setNeedsPassword(true);
-          }
           await loadUserData(s.user.id);
         }
       }
@@ -334,7 +322,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user, session, loading, dataLoaded, tenantId, isSuperadmin, schools, schoolsLoaded, selectedSchool,
         setSelectedSchool, signIn, signOut, createSchool, refreshSchools: fetchSchools,
-        needsPassword, clearNeedsPassword,
       }}
     >
       {children}

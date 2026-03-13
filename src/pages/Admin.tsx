@@ -119,9 +119,12 @@ export const Admin: React.FC = () => {
     setFeedback(null);
 
     try {
+      // Refreshar token antes de chamar a Edge Function para evitar 401
+      const { data: sessionData } = await supabase.auth.getSession();
+      const freshToken = sessionData?.session?.access_token || accessToken;
       const res = await supabase.functions.invoke("invite-user", {
         body: { email: trimmed },
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : undefined,
       });
       if (res.error) throw new Error(res.error.message || "Erro ao enviar convite");
       if (res.data?.error) throw new Error(res.data.error);
@@ -145,9 +148,11 @@ export const Admin: React.FC = () => {
     setActionLoading(userId);
     setFeedback(null);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const freshToken = sessionData?.session?.access_token || accessToken;
       const res = await supabase.functions.invoke("manage-mentee", {
         body: { action, userId },
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : undefined,
       });
       if (res.error) throw new Error(res.error.message || "Erro na operacao");
       if (res.data?.error) throw new Error(res.data.error);

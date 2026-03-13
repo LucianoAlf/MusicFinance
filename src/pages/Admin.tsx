@@ -54,32 +54,16 @@ export const Admin: React.FC = () => {
   const fetchMentees = useCallback(async () => {
     setLoadingMentees(true);
     try {
-      const token = await getFreshToken();
-      if (!token) { setMentees([]); return; }
-
-      const res = await withTimeout(
-        supabase.functions.invoke("list-mentees", { headers: { Authorization: `Bearer ${token}` } }),
-        20000, "list-mentees"
-      );
-
+      const { data, error } = await supabase.rpc("list_mentees");
       if (!mountedRef.current) return;
-      if (res.error) { console.error("[Admin] list-mentees:", res.error); return; }
-      setMentees(res.data || []);
+      if (error) { console.error("[Admin] list_mentees RPC:", error); return; }
+      setMentees(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("[Admin] fetchMentees:", err);
-      // Retry uma vez após timeout (cold start)
-      try {
-        const token = await getFreshToken();
-        const res = await withTimeout(
-          supabase.functions.invoke("list-mentees", { headers: { Authorization: `Bearer ${token}` } }),
-          15000, "list-mentees-retry"
-        );
-        if (mountedRef.current && !res.error) setMentees(res.data || []);
-      } catch { /* desiste após 2 tentativas */ }
     } finally {
       if (mountedRef.current) setLoadingMentees(false);
     }
-  }, [getFreshToken]);
+  }, []);
 
   const fetchInvites = useCallback(async () => {
     setLoadingInvites(true);

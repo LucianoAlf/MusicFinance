@@ -15,6 +15,7 @@ import {
   updateStudent as apiUpdateStudent,
   deleteStudent as apiDeleteStudent,
   upsertPayment as apiUpsertPayment,
+  batchInsertPayments as apiBatchInsertPayments,
   addCostCenter as apiAddCostCenter,
   updateCostCenter as apiUpdateCostCenter,
   deleteCostCenter as apiDeleteCostCenter,
@@ -321,10 +322,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const payments12: (Payment | null)[] = [];
     const paymentInserts = [];
     for (let m = 0; m < 12; m++) {
-      paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PENDING", paidAt: null });
+      paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PENDING" });
       payments12.push({ amount: tuitionVal, status: "PENDING" as PaymentStatus });
     }
-    for (const pi of paymentInserts) await apiUpsertPayment(pi);
+    await apiBatchInsertPayments(paymentInserts);
 
     const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
     const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };

@@ -28,7 +28,7 @@ export const Config = () => {
     try {
       const result = await Promise.race([
         supabase.auth.updateUser({ password: newPass }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Tempo esgotado. Tente novamente.")), 10000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Tempo esgotado. Tente novamente.")), 30000)),
       ]);
       if (result.error) {
         setPassStatus("error");

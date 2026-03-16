@@ -319,7 +319,10 @@ export async function upsertPayment(data: { studentId: string; schoolId: string;
   }
   const row: any = { amount: data.amount, status: data.status };
   if (data.paidAt !== undefined) row.paid_at = data.paidAt;
-  const { data: existing } = await supabase.from("payments").select("id").eq("student_id", data.studentId).eq("year", data.year).eq("month", data.month).maybeSingle();
+  const { data: existing, error: selError } = await supabase.from("payments").select("id").eq("student_id", data.studentId).eq("year", data.year).eq("month", data.month).maybeSingle();
+  if (selError) {
+    console.error("[upsertPayment] erro ao verificar pagamento existente:", selError);
+  }
   if (existing) {
     return supabase.from("payments").update(row).eq("id", existing.id);
   }

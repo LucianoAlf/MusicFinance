@@ -267,21 +267,26 @@ export const Professors = () => {
   const confirmAddStudent = async (pid: string) => {
     if (!nsName.trim() || nsSubmitting) return;
     setNsSubmitting(true);
-    await handleAddStudent(pid, {
-      name: nsName.trim(),
-      day: nsDay,
-      time: nsHour,
-      tuition: Number(nsVal) || data.config.tuition,
-      enrollmentDate: nsEnroll,
-      instrumentId: nsInstId || undefined,
-      personId: nsExisting && nsPersonId ? nsPersonId : undefined,
-      dueDay: Number(nsDueDay) || 5,
-      paymentMethod: nsPayMethod || undefined,
-    });
-    setShowAddStud(null);
-    setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
-    setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
-    setNsSubmitting(false);
+    try {
+      await handleAddStudent(pid, {
+        name: nsName.trim(),
+        day: nsDay,
+        time: nsHour,
+        tuition: Number(nsVal) || data.config.tuition,
+        enrollmentDate: nsEnroll,
+        instrumentId: nsInstId || undefined,
+        personId: nsExisting && nsPersonId ? nsPersonId : undefined,
+        dueDay: Number(nsDueDay) || 5,
+        paymentMethod: nsPayMethod || undefined,
+      });
+      setShowAddStud(null);
+      setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
+      setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
+    } catch (e) {
+      console.error("[confirmAddStudent] erro ao cadastrar aluno:", e);
+    } finally {
+      setNsSubmitting(false);
+    }
   };
 
   const openEditStudent = (s: Student) => {

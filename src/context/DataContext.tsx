@@ -311,14 +311,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => {
-    if (!data || !schoolId) return;
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }): Promise<boolean> => {
+    if (!data || !schoolId) return false;
     markSaving();
     try {
       const tuitionVal = d.tuition || data.config.tuition;
       const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
       const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, paymentMethod: d.paymentMethod });
-      if (error || !row) { markError(); return; }
+      if (error || !row) { markError(); return false; }
 
       const payments12: (Payment | null)[] = [];
       const paymentInserts = [];
@@ -333,9 +333,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
       setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
       markSaved();
+      return true;
     } catch (err) {
       console.error("[DataCtx] handleAddStudent falhou:", err);
       markError();
+      return false;
     }
   };
 

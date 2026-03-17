@@ -143,6 +143,7 @@ export const Professors = () => {
   const [nsSubmitting, setNsSubmitting] = useState(false);
   const [nsExisting, setNsExisting] = useState(false);
   const [nsPersonId, setNsPersonId] = useState("");
+  const [nsError, setNsError] = useState("");
 
   // Edit student modal state
   const [esName, setEsName] = useState("");
@@ -267,8 +268,9 @@ export const Professors = () => {
   const confirmAddStudent = async (pid: string) => {
     if (!nsName.trim() || nsSubmitting) return;
     setNsSubmitting(true);
+    setNsError("");
     try {
-      await handleAddStudent(pid, {
+      const ok = await handleAddStudent(pid, {
         name: nsName.trim(),
         day: nsDay,
         time: nsHour,
@@ -279,11 +281,17 @@ export const Professors = () => {
         dueDay: Number(nsDueDay) || 5,
         paymentMethod: nsPayMethod || undefined,
       });
-      setShowAddStud(null);
-      setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
-      setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
+      if (ok) {
+        setShowAddStud(null);
+        setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
+        setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
+        setNsError("");
+      } else {
+        setNsError("Erro ao cadastrar aluno. Verifique sua conexão e tente novamente.");
+      }
     } catch (e) {
       console.error("[confirmAddStudent] erro ao cadastrar aluno:", e);
+      setNsError("Erro ao cadastrar aluno. Verifique sua conexão e tente novamente.");
     } finally {
       setNsSubmitting(false);
     }
@@ -1048,7 +1056,8 @@ export const Professors = () => {
             <DatePicker value={nsEnroll} onChange={setNsEnroll} />
           </div>
         </div>
-        <div className="flex gap-2 mt-6">
+        {nsError && <p className="text-red-400 text-xs mt-4 mb-0">{nsError}</p>}
+        <div className="flex gap-2 mt-4">
           <button onClick={() => setShowAddStud(null)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
           <button onClick={() => showAddStud && confirmAddStudent(showAddStud)} disabled={nsSubmitting} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
             {nsSubmitting ? "Cadastrando..." : "Cadastrar Aluno"}

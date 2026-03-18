@@ -107,7 +107,7 @@ export const Payables = () => {
 
     const billsToCreate: PayableBill[] = [];
     const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
-    const groupId = "grp" + Date.now();
+    const groupId = crypto.randomUUID();
     const baseAmount = Number(amount);
     const compMo = Number(competenceMonth);
     const compYr = Number(competenceYear) || data.config.year;

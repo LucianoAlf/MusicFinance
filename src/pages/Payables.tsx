@@ -38,6 +38,7 @@ export const Payables = () => {
   const [newCcName, setNewCcName] = useState("");
   const [isNewEi, setIsNewEi] = useState(false);
   const [newEiName, setNewEiName] = useState("");
+  const [formError, setFormError] = useState("");
 
   const [editingBill, setEditingBill] = useState<PayableBill | null>(null);
   const [editDesc, setEditDesc] = useState("");
@@ -80,10 +81,13 @@ export const Payables = () => {
   const monthOptions = MF.map((m, i) => ({ value: String(i), label: m }));
 
   const handleSaveBill = async () => {
-    if (!desc.trim() || !amount || !dueDate) return;
-    if (!isNewCc && !ccId) return;
-    if (isNewCc && !newCcName.trim()) return;
-    if (isNewEi && !newEiName.trim()) return;
+    setFormError("");
+    if (!desc.trim()) { setFormError("Preencha a descrição."); return; }
+    if (!dueDate) { setFormError("Selecione a data de vencimento."); return; }
+    if (!amount || Number(amount) <= 0) { setFormError("Informe o valor."); return; }
+    if (!isNewCc && !ccId) { setFormError("Selecione um centro de custo."); return; }
+    if (isNewCc && !newCcName.trim()) { setFormError("Informe o nome do novo centro de custo."); return; }
+    if (isNewEi && !newEiName.trim()) { setFormError("Informe o nome do novo item de despesa."); return; }
 
     let finalCcId = ccId;
     let finalEiId = eiId;
@@ -189,6 +193,7 @@ export const Payables = () => {
     setType("UNIQUE"); setInstallments("2"); setBillStatus("PENDING"); setPaidAt("");
     setCompetenceMonth(String(curMo)); setCompetenceYear("");
     setIsNewCc(false); setNewCcName(""); setIsNewEi(false); setNewEiName("");
+    setFormError("");
   };
 
   const toggleStatus = (billId: string) => { handleToggleBillStatus(billId); };
@@ -574,6 +579,10 @@ export const Payables = () => {
             </div>
           </div>
         </div>
+
+        {formError && (
+          <p className="text-xs text-accent-red font-medium mt-2">{formError}</p>
+        )}
 
         <div className="flex gap-2 mt-6">
           <button

@@ -130,6 +130,8 @@ export const Professors = () => {
   const [npInstIds, setNpInstIds] = useState<string[]>([]);
   const [npNewInst, setNpNewInst] = useState("");
   const [npAvatarBlob, setNpAvatarBlob] = useState<Blob | null>(null);
+  const [npSubmitting, setNpSubmitting] = useState(false);
+  const [npError, setNpError] = useState("");
 
   // Add student form
   const [nsName, setNsName] = useState("");
@@ -254,15 +256,29 @@ export const Professors = () => {
 
   const prof = selProf ? data.professors.find((p) => p.id === selProf) : null;
   const confirmAddProf = async () => {
-    if (!npName.trim() || npInstIds.length === 0) return;
-    const firstInstName = instruments.find(i => i.id === npInstIds[0])?.name || "";
-    const profId = await handleAddProfessor({ name: npName.trim(), instrument: firstInstName, costPerStudent: Number(npCost) || 100, instrumentIds: npInstIds });
-    if (profId && npAvatarBlob && schoolId) {
-      const url = await uploadProfessorAvatar(npAvatarBlob, schoolId, profId);
-      if (url) await handleUpdateProfessor(profId, { avatarUrl: url });
+    if (!npName.trim() || npInstIds.length === 0 || npSubmitting) return;
+    setNpSubmitting(true);
+    setNpError("");
+    try {
+      const firstInstName = instruments.find(i => i.id === npInstIds[0])?.name || "";
+      const profId = await handleAddProfessor({ name: npName.trim(), instrument: firstInstName, costPerStudent: Number(npCost) || 100, instrumentIds: npInstIds });
+      if (!profId) {
+        setNpError("Erro ao cadastrar professor. Verifique sua conexão e tente novamente.");
+        return;
+      }
+      if (npAvatarBlob && schoolId) {
+        const url = await uploadProfessorAvatar(npAvatarBlob, schoolId, profId);
+        if (url) await handleUpdateProfessor(profId, { avatarUrl: url });
+      }
+      setShowAddProf(false);
+      setNpName(""); setNpCost("100"); setNpInstIds([]); setNpNewInst(""); setNpAvatarBlob(null);
+      setNpError("");
+    } catch (e) {
+      console.error("[confirmAddProf] erro ao cadastrar professor:", e);
+      setNpError("Erro ao cadastrar professor. Verifique sua conexão e tente novamente.");
+    } finally {
+      setNpSubmitting(false);
     }
-    setShowAddProf(false);
-    setNpName(""); setNpCost("100"); setNpInstIds([]); setNpNewInst(""); setNpAvatarBlob(null);
   };
 
   const confirmAddStudent = async (pid: string) => {
@@ -874,7 +890,7 @@ export const Professors = () => {
       {/* Modal Novo Professor */}
       <Modal
         open={showAddProf}
-        onOpenChange={(v) => { if (!v) setShowAddProf(false); }}
+        onOpenChange={(v) => { if (!v) { setShowAddProf(false); setNpError(""); } }}
         title="Novo Professor"
         size="sm"
       >
@@ -940,9 +956,12 @@ export const Professors = () => {
             <input type="number" value={npCost} onChange={(e) => setNpCost(e.target.value)} className={inp} />
           </div>
         </div>
+        {npError && <p className="text-accent-red text-xs mt-4 mb-0">{npError}</p>}
         <div className="flex gap-2 mt-6">
           <button onClick={() => setShowAddProf(false)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
-          <button onClick={confirmAddProf} disabled={!npName.trim() || npInstIds.length === 0} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer">Cadastrar</button>
+          <button onClick={confirmAddProf} disabled={!npName.trim() || npInstIds.length === 0 || npSubmitting} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer">
+            {npSubmitting ? "Cadastrando..." : "Cadastrar"}
+          </button>
         </div>
       </Modal>
 

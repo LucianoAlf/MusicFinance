@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { DataProvider, useData } from "./context/DataContext";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 const Dashboard = React.lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
 const Professors = React.lazy(() => import("./pages/Professors").then(m => ({ default: m.Professors })));
 const Financial = React.lazy(() => import("./pages/Financial").then(m => ({ default: m.Financial })));
@@ -166,8 +167,10 @@ const AppRouter = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRouter />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppRouter />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

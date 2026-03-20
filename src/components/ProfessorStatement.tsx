@@ -83,43 +83,45 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
       </div>
 
       <div className="rounded-xl border border-border-primary overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-surface-tertiary">
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-3">Aluno</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2">Curso</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Mensalidade</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Pago</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Custo Prof.</th>
-              <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {statement.rows.map((r, i) => (
-              <tr key={i} className="border-t border-border-primary hover:bg-surface-tertiary/50 transition-colors">
-                <td className="py-2 px-3 text-[11px] font-medium text-text-primary">{r.name}</td>
-                <td className="py-2 px-2 text-[11px] text-text-secondary">{r.instrument}</td>
-                <td className="py-2 px-2 text-[11px] font-mono text-text-secondary text-right">{brl(r.expected)}</td>
-                <td className={cn("py-2 px-2 text-[11px] font-mono text-right font-medium", r.paid > 0 ? "text-accent-green" : "text-text-tertiary")}>
-                  {r.paid > 0 ? brl(r.paid) : "—"}
-                </td>
-                <td className="py-2 px-2 text-[11px] font-mono text-accent-red text-right">
-                  {brl(r.cost)}
-                </td>
-                <td className="py-2 px-2 text-center">
-                  <span className={cn(
-                    "text-[9px] px-2 py-0.5 rounded-full font-semibold",
-                    r.status === "PAID" ? "bg-accent-green/10 text-accent-green" :
-                    r.status === "WAIVED" ? "bg-surface-tertiary text-text-tertiary" :
-                    "bg-accent-amber/10 text-accent-amber"
-                  )}>
-                    {r.status === "PAID" ? "Pago" : r.status === "WAIVED" ? "Isento" : "Pendente"}
-                  </span>
-                </td>
+        <div className="max-h-[45vh] overflow-y-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 z-10 bg-surface-tertiary">
+              <tr>
+                <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-3">Aluno</th>
+                <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2">Curso</th>
+                <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Mensalidade</th>
+                <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Pago</th>
+                <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-right">Custo Prof.</th>
+                <th className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium py-2.5 px-2 text-center">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {statement.rows.map((r, i) => (
+                <tr key={i} className="border-t border-border-primary hover:bg-surface-tertiary/50 transition-colors">
+                  <td className="py-2 px-3 text-[11px] font-medium text-text-primary">{r.name}</td>
+                  <td className="py-2 px-2 text-[11px] text-text-secondary">{r.instrument}</td>
+                  <td className="py-2 px-2 text-[11px] font-mono text-text-secondary text-right">{brl(r.expected)}</td>
+                  <td className={cn("py-2 px-2 text-[11px] font-mono text-right font-medium", r.paid > 0 ? "text-accent-green" : "text-text-tertiary")}>
+                    {r.paid > 0 ? brl(r.paid) : "—"}
+                  </td>
+                  <td className="py-2 px-2 text-[11px] font-mono text-accent-red text-right">
+                    {brl(r.cost)}
+                  </td>
+                  <td className="py-2 px-2 text-center">
+                    <span className={cn(
+                      "text-[9px] px-2 py-0.5 rounded-full font-semibold",
+                      r.status === "PAID" ? "bg-accent-green/10 text-accent-green" :
+                      r.status === "WAIVED" ? "bg-surface-tertiary text-text-tertiary" :
+                      "bg-accent-amber/10 text-accent-amber"
+                    )}>
+                      {r.status === "PAID" ? "Pago" : r.status === "WAIVED" ? "Isento" : "Pendente"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <div className="border-t border-border-primary bg-surface-tertiary px-3 py-3">
           <div className="grid grid-cols-4 gap-4">

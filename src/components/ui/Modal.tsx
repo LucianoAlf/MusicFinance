@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { X, AlertTriangle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -32,7 +33,7 @@ export function Modal({ open, onOpenChange, title, size = "md", children }: Moda
             "bg-surface-secondary border border-border-primary shadow-2xl shadow-black/50"
           )}
         >
-          {title && (
+          {title ? (
             <div className="flex items-center justify-between mb-5">
               <Dialog.Title
                 className="text-base font-semibold text-text-primary"
@@ -47,7 +48,14 @@ export function Modal({ open, onOpenChange, title, size = "md", children }: Moda
                 </button>
               </Dialog.Close>
             </div>
+          ) : (
+            <VisuallyHidden>
+              <Dialog.Title>Modal</Dialog.Title>
+            </VisuallyHidden>
           )}
+          <VisuallyHidden>
+            <Dialog.Description>Conteúdo do modal</Dialog.Description>
+          </VisuallyHidden>
           {children}
         </Dialog.Content>
       </Dialog.Portal>
@@ -113,9 +121,9 @@ export function ConfirmModal({
             <Dialog.Title className="text-base font-semibold text-text-primary mb-1">
               {title}
             </Dialog.Title>
-            <p className="text-xs text-text-secondary leading-relaxed">
+            <Dialog.Description className="text-xs text-text-secondary leading-relaxed">
               {message}
-            </p>
+            </Dialog.Description>
           </div>
           <div className="flex gap-2">
             <button

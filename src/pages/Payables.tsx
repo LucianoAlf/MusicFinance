@@ -82,6 +82,7 @@ export const Payables = () => {
 
   const handleSaveBill = async () => {
     setFormError("");
+    console.log("[Payables] handleSaveBill - desc:", JSON.stringify(desc), "length:", desc.length);
     if (!desc.trim()) { setFormError("Preencha a descrição."); return; }
     if (!dueDate) { setFormError("Selecione a data de vencimento."); return; }
     if (!amount || Number(amount) <= 0) { setFormError("Informe o valor."); return; }
@@ -94,12 +95,18 @@ export const Payables = () => {
 
     if (isNewCc) {
       finalCcId = await handleAddCostCenter({ name: newCcName.trim(), color: COLORS[data.expenses.length % COLORS.length] });
-      if (!finalCcId) return;
+      if (!finalCcId) {
+        setFormError("Erro ao criar centro de custo. Tente novamente.");
+        return;
+      }
     }
 
     if (isNewEi) {
       finalEiId = await handleAddExpenseItem(finalCcId, { name: newEiName.trim(), type: "F" as const });
-      if (!finalEiId) return;
+      if (!finalEiId) {
+        setFormError("Erro ao criar item de despesa. Tente novamente.");
+        return;
+      }
     }
 
     const baseDate = new Date(dueDate + "T12:00:00");

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useData } from "../context/DataContext";
 import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
@@ -39,6 +39,15 @@ import {
 
 export const Dashboard = () => {
   const { data, calcMo, curMo, setCurMo, viewKpis } = useData();
+  const [chartsReady, setChartsReady] = useState(false);
+
+  // Aguardar o DOM estar pronto antes de renderizar os gráficos
+  // Evita erro "insertBefore" do Recharts em containers com dimensão 0
+  useEffect(() => {
+    const timer = setTimeout(() => setChartsReady(true), 50);
+    return () => clearTimeout(timer);
+  }, []);
+
   if (!data) return null;
 
   const md = Array.from({ length: 12 }, (_, i) => calcMo(i));
@@ -178,7 +187,9 @@ export const Dashboard = () => {
         <CourseBreakdown professors={data.professors} currentMonth={curMo} />
       )}
 
-      {/* Gráficos */}
+      {/* Gráficos - só renderiza após DOM estar pronto */}
+      {chartsReady && (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-xl p-4 bg-surface-secondary border border-border-primary">
           <h3 className="text-xs font-semibold mb-4 text-text-primary uppercase tracking-wider">
@@ -290,6 +301,8 @@ export const Dashboard = () => {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Tabela de Indicadores Mensais */}
       <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">

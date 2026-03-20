@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { cn } from "../lib/utils";
-import { Send, Loader2, Users, Mail, Clock, CheckCircle, XCircle, Pause, Play, Trash2, MoreVertical } from "lucide-react";
+import { Send, Loader2, Users, Mail, Clock, CheckCircle, XCircle, Pause, Play, Trash2, MoreVertical, KeyRound } from "lucide-react";
 
 interface Mentee {
   userId: string;
@@ -135,7 +135,7 @@ export const Admin: React.FC = () => {
     await fetchInvites();
   };
 
-  const handleMenteeAction = async (action: "pause" | "activate" | "delete", userId: string) => {
+  const handleMenteeAction = async (action: "pause" | "activate" | "delete" | "resend_access", userId: string) => {
     setActionLoading(userId);
     setFeedback(null);
     try {
@@ -154,6 +154,7 @@ export const Admin: React.FC = () => {
         pause: "Mentorado pausado com sucesso",
         activate: "Mentorado reativado com sucesso",
         delete: "Mentorado excluido com sucesso",
+        resend_access: "Email para definir nova senha enviado",
       };
       setFeedback({ type: "success", msg: msgs[action] });
       setConfirmDelete(null);
@@ -286,6 +287,12 @@ export const Admin: React.FC = () => {
                         </button>
                         {openMenu === m.userId && (
                           <div className="absolute right-0 top-full mt-1 z-[9999] bg-surface-secondary border border-border-primary rounded-lg shadow-xl py-1 min-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleMenteeAction("resend_access", m.userId)}
+                              className="w-full text-left px-4 py-2.5 text-xs text-text-secondary hover:bg-surface-tertiary hover:text-accent-blue transition-colors flex items-center gap-2.5 cursor-pointer bg-transparent border-none"
+                            >
+                              <KeyRound size={13} /> Reenviar acesso / senha
+                            </button>
                             <button
                               onClick={() => handleMenteeAction("pause", m.userId)}
                               className="w-full text-left px-4 py-2.5 text-xs text-text-secondary hover:bg-surface-tertiary hover:text-yellow-400 transition-colors flex items-center gap-2.5 cursor-pointer bg-transparent border-none"

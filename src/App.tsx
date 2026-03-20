@@ -15,6 +15,7 @@ const SchoolSelector = React.lazy(() => import("./pages/SchoolSelector").then(m 
 const CreateSchool = React.lazy(() => import("./pages/CreateSchool").then(m => ({ default: m.CreateSchool })));
 import { cn } from "./lib/utils";
 import { Loader2 } from "lucide-react";
+import { SetPasswordModal, needsPasswordSetup } from "./components/SetPasswordModal";
 
 const LoadingScreen = () => (
   <div className="min-h-screen flex flex-col items-center justify-center bg-surface-primary">
@@ -95,8 +96,19 @@ const AppContent = () => {
 };
 
 const AppRouter = () => {
-  const { user, loading, dataLoaded, selectedSchool, schools, schoolsLoaded, tenantId } = useAuth();
+  const { user, session, loading, dataLoaded, selectedSchool, schools, schoolsLoaded, tenantId } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+
+  React.useEffect(() => {
+    if (!user) {
+      setNeedsPassword(false);
+      return;
+    }
+
+    const amr = (session as any)?.amr as Array<{ method: string }> | undefined;
+    setNeedsPassword(needsPasswordSetup(user.id, amr));
+  }, [user, session]);
 
   // Mostrar loading enquanto:
   // 1. Auth está carregando (loading=true)
@@ -108,6 +120,15 @@ const AppRouter = () => {
   // Usuário não logado → Login
   if (!user) {
     return <Login />;
+  }
+
+  if (needsPassword) {
+    return (
+      <SetPasswordModal
+        email={user.email || ""}
+        onComplete={() => setNeedsPassword(false)}
+      />
+    );
   }
 
   if (selectedSchool) {

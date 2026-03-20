@@ -9,7 +9,7 @@ function getConfiguredOrigins() {
     single,
     ...list
       .split(",")
-      .map((o) => o.trim())
+      .map((o: string) => o.trim())
       .filter(Boolean),
   ];
 }
@@ -41,9 +41,9 @@ function json(req: Request, body: unknown, status = 200) {
   });
 }
 
-type Action = "pause" | "activate" | "delete";
+type Action = "pause" | "activate" | "delete" | "resend_access";
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: getCorsHeaders(req) });
   }
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     const action = payload?.action as Action;
     const userId = payload?.userId as string;
 
-    if (!action || !["pause", "activate", "delete"].includes(action)) {
+    if (!action || !["pause", "activate", "delete", "resend_access"].includes(action)) {
       return json(req, { error: "Action invalida" }, 400);
     }
 
@@ -105,6 +105,25 @@ Deno.serve(async (req) => {
       return json(req, { success: true, status: nextStatus });
     }
 
+    if (action === "resend_access") {
+      const { data: targetUserRes, error: targetUserError } = await adminClient.auth.admin.getUserById(userId);
+      const targetEmail = targetUserRes?.user?.email || null;
+
+      if (targetUserError || !targetEmail) {
+        return json(req, { error: "Usuario nao encontrado para reenviar acesso" }, 404);
+      }
+
+      const redirectTo = Deno.env.get("ACCESS_REDIRECT_TO") || Deno.env.get("ALLOWED_ORIGIN") || undefined;
+
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo,
+      });
+
+      if (resetError) return json(req, { error: resetError.message }, 400);
+
+      return json(req, { success: true, resent: true, email: targetEmail });
+    }
+
     const { data: links, error: linksError } = await adminClient
       .from("tenant_users")
       .select("tenant_id")
@@ -112,7 +131,7 @@ Deno.serve(async (req) => {
 
     if (linksError) return json(req, { error: linksError.message }, 400);
 
-    const tenantIds = [...new Set((links || []).map((l) => l.tenant_id).filter(Boolean))] as string[];
+    const tenantIds = [...new Set((links || []).map((l: { tenant_id: string }) => l.tenant_id).filter(Boolean))] as string[];
 
     const { data: targetUserRes, error: targetUserError } = await adminClient.auth.admin.getUserById(userId);
     const targetEmail = targetUserRes?.user?.email || null;

@@ -463,16 +463,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const handleAddExpenseItem = async (ccId: string, d: { name: string; type: "F" | "V" }): Promise<string> => {
-    console.log("[DataContext] handleAddExpenseItem chamado - ccId:", ccId, "name:", d.name, "type:", d.type);
-    if (!data) {
-      console.log("[DataContext] handleAddExpenseItem - data é null, retornando vazio");
-      return "";
-    }
+    if (!data) return "";
     markSaving();
     const { data: row, error } = await apiAddExpenseItem(ccId, { name: d.name, expenseType: d.type });
-    console.log("[DataContext] apiAddExpenseItem resultado - row:", row, "error:", error);
     if (error || !row) {
-      console.error("[DataContext] handleAddExpenseItem falhou - error:", error);
+      console.error("[DataContext] handleAddExpenseItem falhou:", error);
       markError();
       return "";
     }

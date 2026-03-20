@@ -160,9 +160,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         slugMapRef.current = dataResult.slugMap;
         setInstruments(dataResult.instruments);
       } else {
-        console.error("[Data] fetchAllData: dados retornaram null!", dataResult.error);
-        setDataError(dataResult.error || "Não foi possível carregar os dados da escola. Tente fazer login novamente.");
-        setData(null);
+        // Retry uma vez antes de desistir
+        console.warn("[Data] RPC retornou null, tentando novamente em 1s...");
+        await new Promise(r => setTimeout(r, 1000));
+        const retryResult = await loadSchoolData(schoolId);
+        if (retryResult.data) {
+          setData(retryResult.data);
+          slugMapRef.current = retryResult.slugMap;
+          setInstruments(retryResult.instruments);
+        } else {
+          console.error("[Data] fetchAllData falhou após retry:", retryResult.error);
+          setDataError(retryResult.error || "Não foi possível carregar os dados da escola. Tente fazer login novamente.");
+          // NÃO fazer setData(null) — manter dados anteriores se existirem
+        }
       }
 
       const kpis = kpisResult.kpis || [];

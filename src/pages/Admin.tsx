@@ -47,6 +47,10 @@ export const Admin: React.FC = () => {
 
   /** Busca token fresco */
   const getFreshToken = useCallback(async () => {
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError && refreshed?.session?.access_token) {
+      return refreshed.session.access_token;
+    }
     const { data } = await supabase.auth.getSession();
     return data?.session?.access_token || session?.access_token || "";
   }, [session]);
@@ -109,10 +113,11 @@ export const Admin: React.FC = () => {
 
     try {
       const token = await getFreshToken();
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
       const res = await withTimeout(
         supabase.functions.invoke("invite-user", {
           body: { email: trimmed },
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: { Authorization: `Bearer ${token}` },
         }),
         25000, "invite-user"
       );
@@ -140,10 +145,11 @@ export const Admin: React.FC = () => {
     setFeedback(null);
     try {
       const token = await getFreshToken();
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
       const res = await withTimeout(
         supabase.functions.invoke("manage-mentee", {
           body: { action, userId },
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: { Authorization: `Bearer ${token}` },
         }),
         20000, "manage-mentee"
       );

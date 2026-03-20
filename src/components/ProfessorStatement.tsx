@@ -32,18 +32,20 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
 
   const whatsappText = useMemo(() => {
     const lines: string[] = [];
-    lines.push(`*EXTRATO — ${professor.name}*`);
+    lines.push(`📋 *EXTRATO*`);
+    lines.push(`*${professor.name}*`);
     lines.push(`${MF[month]} ${year} · ${schoolName}`);
     lines.push("");
-    lines.push("```");
-    statement.rows.forEach((r) => {
-      lines.push(`${r.name.padEnd(22)} ${r.instrument.padEnd(10)} ${brl(r.cost).padStart(8)}`);
+    lines.push(`👥 *Alunos (${statement.activeCount})*`);
+    statement.rows.forEach((r, i) => {
+      lines.push(`${i + 1}. ${r.name} _(${r.instrument})_`);
     });
-    lines.push("```");
     lines.push("");
-    lines.push(`Alunos ativos: *${statement.activeCount}*`);
-    lines.push(`Valor por aluno: *${brl(professor.costPerStudent)}*`);
-    lines.push(`*TOTAL: ${brl(statement.totalCost)}*`);
+    lines.push(`💰 *Resumo*`);
+    lines.push(`• Valor por aluno: ${brl(professor.costPerStudent)}`);
+    lines.push(`• Total de alunos: ${statement.activeCount}`);
+    lines.push("");
+    lines.push(`✅ *TOTAL A RECEBER: ${brl(statement.totalCost)}*`);
     return lines.join("\n");
   }, [professor, month, year, schoolName, statement]);
 

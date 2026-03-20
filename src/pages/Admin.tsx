@@ -45,12 +45,21 @@ export const Admin: React.FC = () => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  /** Busca token fresco */
+  /** Busca token fresco com timeout para evitar travamento */
   const getFreshToken = useCallback(async () => {
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (!refreshError && refreshed?.session?.access_token) {
-      return refreshed.session.access_token;
+    try {
+      // Tenta refresh com timeout de 5s
+      const refreshPromise = supabase.auth.refreshSession();
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+      const result = await Promise.race([refreshPromise, timeoutPromise]);
+      
+      if (result && 'data' in result && result.data?.session?.access_token) {
+        return result.data.session.access_token;
+      }
+    } catch (e) {
+      console.warn("[Admin] refreshSession falhou:", e);
     }
+    // Fallback: usa sessão atual
     const { data } = await supabase.auth.getSession();
     return data?.session?.access_token || session?.access_token || "";
   }, [session]);

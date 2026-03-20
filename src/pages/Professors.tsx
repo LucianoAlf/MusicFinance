@@ -890,7 +890,10 @@ export const Professors = () => {
       {/* Modal Novo Professor */}
       <Modal
         open={showAddProf}
-        onOpenChange={(v) => { if (!v) { setShowAddProf(false); setNpError(""); } }}
+        onOpenChange={(v) => {
+          console.log("[Modal Novo Professor] open:", v, "instruments:", instruments.length);
+          if (!v) { setShowAddProf(false); setNpError(""); }
+        }}
         title="Novo Professor"
         size="sm"
       >
@@ -918,7 +921,15 @@ export const Professors = () => {
             </div>
             <Select
               value=""
-              onValueChange={(v) => { if (v && !npInstIds.includes(v)) setNpInstIds(prev => [...prev, v]); }}
+              onValueChange={(v) => {
+                console.log("[Select] onValueChange chamado com:", v);
+                console.log("[Select] npInstIds atual:", npInstIds);
+                console.log("[Select] instruments disponíveis:", instruments.length);
+                if (v && !npInstIds.includes(v)) {
+                  console.log("[Select] Adicionando instrumento:", v);
+                  setNpInstIds(prev => [...prev, v]);
+                }
+              }}
               options={instruments.filter(i => !npInstIds.includes(i.id)).map(i => ({ value: i.id, label: i.name }))}
               placeholder="Selecionar instrumento..."
             />

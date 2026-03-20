@@ -93,8 +93,14 @@ export const Payables = () => {
     let finalCcId = ccId;
     let finalEiId = eiId;
 
+    console.log("[Payables] isNewCc:", isNewCc, "isNewEi:", isNewEi);
+    console.log("[Payables] ccId:", ccId, "eiId:", eiId);
+    console.log("[Payables] newCcName:", newCcName, "newEiName:", newEiName);
+
     if (isNewCc) {
+      console.log("[Payables] Criando novo centro de custo...");
       finalCcId = await handleAddCostCenter({ name: newCcName.trim(), color: COLORS[data.expenses.length % COLORS.length] });
+      console.log("[Payables] Resultado handleAddCostCenter:", finalCcId);
       if (!finalCcId) {
         setFormError("Erro ao criar centro de custo. Tente novamente.");
         return;
@@ -102,7 +108,9 @@ export const Payables = () => {
     }
 
     if (isNewEi) {
+      console.log("[Payables] Criando novo item de despesa com ccId:", finalCcId, "name:", newEiName.trim());
       finalEiId = await handleAddExpenseItem(finalCcId, { name: newEiName.trim(), type: "F" as const });
+      console.log("[Payables] Resultado handleAddExpenseItem:", finalEiId);
       if (!finalEiId) {
         setFormError("Erro ao criar item de despesa. Tente novamente.");
         return;

@@ -463,10 +463,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const handleAddExpenseItem = async (ccId: string, d: { name: string; type: "F" | "V" }): Promise<string> => {
-    if (!data) return "";
+    console.log("[DataContext] handleAddExpenseItem chamado - ccId:", ccId, "name:", d.name, "type:", d.type);
+    if (!data) {
+      console.log("[DataContext] handleAddExpenseItem - data é null, retornando vazio");
+      return "";
+    }
     markSaving();
     const { data: row, error } = await apiAddExpenseItem(ccId, { name: d.name, expenseType: d.type });
-    if (error || !row) { markError(); return ""; }
+    console.log("[DataContext] apiAddExpenseItem resultado - row:", row, "error:", error);
+    if (error || !row) {
+      console.error("[DataContext] handleAddExpenseItem falhou - error:", error);
+      markError();
+      return "";
+    }
     setData((prev) => {
       if (!prev) return prev;
       return { ...prev, expenses: prev.expenses.map((cc) => cc.id === ccId ? { ...cc, items: [...cc.items, { id: row.id, name: row.name, type: (row.expense_type === "F" ? "F" : "V") as "F" | "V", amounts: Array(12).fill(0) }] } : cc) };

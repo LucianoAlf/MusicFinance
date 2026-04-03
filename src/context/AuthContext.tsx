@@ -219,17 +219,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout: se INITIAL_SESSION não disparar em 10s,
-    // desbloqueia UI (mostra Login). NÃO limpar localStorage — se o token
-    // refresh completar depois, INITIAL_SESSION vai setar o user normalmente.
+    // Safety timeout: se nada acontecer em 15s, desbloqueia UI.
     const safetyTimer = setTimeout(() => {
-      if (mounted) {
-        console.warn("[Auth] INITIAL_SESSION timeout — unblocking UI");
+      if (mounted && !dataLoadedRef.current) {
+        console.warn("[Auth] safety timeout — unblocking UI");
         setLoading(false);
         setDataLoaded(true);
         dataLoadedRef.current = true;
       }
-    }, 10000);
+    }, 15000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (!mounted) return;
@@ -240,8 +238,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSession(s);
           setUser(s.user);
           // NÃO bloquear — loadUserData roda em background.
-          // App.tsx line 206 mostra LoadingScreen enquanto schoolsLoaded=false.
-          void loadUserData(s.user.id);
+          // App.tsx mostra LoadingScreen enquanto schoolsLoaded=false.
+          if (!dataLoadedRef.current) {
+            void loadUserData(s.user.id);
+          }
         } else {
           setDataLoaded(true);
           dataLoadedRef.current = true;
@@ -271,7 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (s?.user) {
         setSession(s);
         setUser(s.user);
-        // Pular loadUserData se INITIAL_SESSION já carregou (evita duplicata no invite flow)
+        // Pular loadUserData se já carregou (evita duplicata no invite flow)
         if (event === "SIGNED_IN" && !dataLoadedRef.current) {
           await loadUserData(s.user.id);
         }

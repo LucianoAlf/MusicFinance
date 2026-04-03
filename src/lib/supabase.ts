@@ -87,8 +87,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Em dev, ignorar navigator.locks evita travas ocasionais de HMR/refresh.
-    // Em produção, manter o lock padrão do Supabase reduz corridas de refresh token.
-    ...(import.meta.env.DEV ? { lock: noCrossTabLock } : {}),
+    // App é single-tab — desabilitar navigator.locks em TODOS os ambientes.
+    // O lock padrão do Supabase (5s timeout) trava a inicialização quando há
+    // lock órfão de sessão/aba anterior, causando INITIAL_SESSION timeout.
+    lock: noCrossTabLock,
   },
 });

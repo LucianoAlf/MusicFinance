@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { DashboardData, Instrument, Payment, PaymentStatus, PayableBill, ViewKpis } from "../types";
 import { useAuth } from "./AuthContext";
+import { formatAppError } from "../lib/supabase";
 import { MS } from "../lib/utils";
 import {
   loadSchoolData,
@@ -60,12 +61,12 @@ interface DataContextType {
   setSelPay: React.Dispatch<React.SetStateAction<string | null>>;
   calcMo: (m: number) => any;
   saveStatus: SaveStatus;
-  handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<void>;
-  handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number }) => Promise<void>;
+  handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<string>;
+  handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number; avatarUrl?: string | null }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => Promise<string>;
   handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
-  handleAddInstrument: (name: string) => Promise<Instrument | null>;
+  handleAddInstrument: (name: string) => Promise<Instrument>;
   handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleDeleteStudent: (profId: string, studentId: string) => Promise<void>;
@@ -280,10 +281,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ─── Write handlers ────────────────────────────────────────────────────
 
   const handleAddProfessor = async (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[]; avatarUrl?: string }) => {
-    if (!data || !schoolId) return;
+    if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     const { data: row, error } = await apiAddProfessor(schoolId, d);
-    if (error || !row) { markError(); return; }
+    if (error || !row) {
+      const message = formatAppError(error, "Erro ao cadastrar professor.");
+      console.error("[DataContext] handleAddProfessor falhou:", error);
+      markError();
+      throw new Error(message);
+    }
     const profInsts = (d.instrumentIds || []).map(iid => {
       const inst = instruments.find(i => i.id === iid);
       return { id: iid, name: inst?.name || "" };
@@ -321,14 +327,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }): Promise<boolean> => {
-    if (!data || !schoolId) return false;
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }): Promise<string> => {
+    if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     try {
       const tuitionVal = d.tuition || data.config.tuition;
       const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
-      const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, paymentMethod: d.paymentMethod });
-      if (error || !row) { markError(); return false; }
+      const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, dueDay: d.dueDay, paymentMethod: d.paymentMethod });
+      if (error || !row) {
+        const message = formatAppError(error, "Erro ao cadastrar aluno.");
+        markError();
+        throw new Error(message);
+      }
 
       const payments12: (Payment | null)[] = [];
       const paymentInserts = [];
@@ -337,17 +347,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         payments12.push({ amount: tuitionVal, status: "PENDING" as PaymentStatus });
       }
       const { error: payErr } = await apiBatchInsertPayments(paymentInserts);
-      if (payErr) console.error("[DataCtx] batchInsertPayments:", payErr);
+      if (payErr) {
+        console.error("[DataContext] batchInsertPayments falhou:", payErr);
+        await apiDeleteStudent(row.id);
+        markError();
+        throw new Error(formatAppError(payErr, "Erro ao criar as mensalidades do aluno."));
+      }
 
       const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
       const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
       setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
       markSaved();
-      return true;
+      return row.id;
     } catch (err) {
       console.error("[DataCtx] handleAddStudent falhou:", err);
       markError();
-      return false;
+      throw err;
     }
   };
 
@@ -718,11 +733,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddInstrument = async (name: string): Promise<Instrument | null> => {
-    if (!schoolId) return null;
+  const handleAddInstrument = async (name: string): Promise<Instrument> => {
+    if (!schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     const { data: row, error } = await apiAddInstrument(schoolId, name);
-    if (error || !row) { markError(); return null; }
+    if (error || !row) {
+      const message = formatAppError(error, "Erro ao criar instrumento.");
+      console.error("[DataContext] handleAddInstrument falhou:", error);
+      markError();
+      throw new Error(message);
+    }
     const inst = { id: row.id, name: row.name };
     setInstruments(prev => [...prev, inst].sort((a, b) => a.name.localeCompare(b.name)));
     markSaved();

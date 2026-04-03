@@ -225,9 +225,14 @@ export async function addProfessor(schoolId: string, data: { name: string; instr
   const row: any = { school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent };
   if (data.avatarUrl) row.avatar_url = data.avatarUrl;
   const res = await supabase.from("professors").insert(row).select("id, name, instrument, cost_per_student, avatar_url").maybeSingle();
-  if (res.data && data.instrumentIds && data.instrumentIds.length > 0) {
+  if (res.error || !res.data) return res;
+
+  if (data.instrumentIds && data.instrumentIds.length > 0) {
     const links = data.instrumentIds.map(iid => ({ professor_id: res.data.id, instrument_id: iid }));
-    await supabase.from("professor_instruments").insert(links);
+    const linkRes = await supabase.from("professor_instruments").insert(links);
+    if (linkRes.error) {
+      return { ...res, error: linkRes.error };
+    }
   }
   return res;
 }

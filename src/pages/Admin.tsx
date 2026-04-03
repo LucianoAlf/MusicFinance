@@ -31,6 +31,91 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function extractErrorText(value: unknown): string | null {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const parseCandidate = (candidate: string): string | null => {
+      try {
+        const parsed = JSON.parse(candidate) as Record<string, unknown>;
+        return (
+          extractErrorText(parsed.msg) ??
+          extractErrorText(parsed.error_description) ??
+          extractErrorText(parsed.error) ??
+          candidate
+        );
+      } catch {
+        return null;
+      }
+    };
+
+    const parsedDirect = parseCandidate(trimmed);
+    if (parsedDirect) return parsedDirect;
+
+    const jsonStart = trimmed.indexOf("{");
+    if (jsonStart > 0) {
+      const parsedSuffix = parseCandidate(trimmed.slice(jsonStart));
+      if (parsedSuffix) return parsedSuffix;
+    }
+
+    try {
+      const parsedArray = JSON.parse(`[${trimmed}]`) as unknown[];
+      if (parsedArray.length === 1) {
+        const parsedWrapped = extractErrorText(parsedArray[0]);
+        if (parsedWrapped) return parsedWrapped;
+      }
+    } catch {
+      // Ignore and fall back to the original string below.
+    }
+
+    return trimmed;
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return (
+      extractErrorText(record.msg) ??
+      extractErrorText(record.error_description) ??
+      extractErrorText(record.error) ??
+      extractErrorText(record.message)
+    );
+  }
+
+  return null;
+}
+
+async function getInvokeErrorMessage(error: unknown, fallback: string) {
+  if (!error || typeof error !== "object") {
+    return fallback;
+  }
+
+  const message = "message" in error && typeof error.message === "string"
+    ? error.message
+    : fallback;
+
+  const context = "context" in error ? error.context : null;
+  if (!(context instanceof Response)) {
+    return message || fallback;
+  }
+
+  try {
+    const payload = await context.clone().json();
+    const parsedPayloadMessage = extractErrorText(payload);
+    if (parsedPayloadMessage) return parsedPayloadMessage;
+  } catch {
+    // Fallback para o message genérico do SDK
+  }
+
+  return extractErrorText(message) || fallback;
+}
+
 export const Admin: React.FC = () => {
   const { session, isSuperadmin, user } = useAuth();
   const [mentees, setMentees] = useState<Mentee[]>([]);
@@ -113,7 +198,7 @@ export const Admin: React.FC = () => {
 
   const handleInvite = async () => {
     const trimmed = email.trim().toLowerCase();
-    if (!trimmed || !trimmed.includes("@")) {
+    if (!trimmed || !isValidEmail(trimmed)) {
       setFeedback({ type: "error", msg: "Informe um email valido." });
       return;
     }
@@ -130,15 +215,22 @@ export const Admin: React.FC = () => {
         }),
         25000, "invite-user"
       );
-      if (res.error) throw new Error(res.error.message || "Erro ao enviar convite");
-      if (res.data?.error) throw new Error(res.data.error);
+      if (res.error) {
+        throw new Error(await getInvokeErrorMessage(res.error, "Erro ao enviar convite"));
+      }
+      if (res.data?.error) {
+        throw new Error(extractErrorText(res.data.error) || "Erro ao enviar convite");
+      }
 
       setFeedback({ type: "success", msg: `Convite enviado para ${trimmed}` });
       setEmail("");
       fetchInvites();
       fetchMentees();
     } catch (err: any) {
-      setFeedback({ type: "error", msg: err.message || "Erro ao enviar convite" });
+      setFeedback({
+        type: "error",
+        msg: extractErrorText(err) || extractErrorText(err?.message) || "Erro ao enviar convite",
+      });
     } finally {
       setSending(false);
     }
@@ -162,8 +254,12 @@ export const Admin: React.FC = () => {
         }),
         20000, "manage-mentee"
       );
-      if (res.error) throw new Error(res.error.message || "Erro na operacao");
-      if (res.data?.error) throw new Error(res.data.error);
+      if (res.error) {
+        throw new Error(await getInvokeErrorMessage(res.error, "Erro na operacao"));
+      }
+      if (res.data?.error) {
+        throw new Error(extractErrorText(res.data.error) || "Erro na operacao");
+      }
 
       const msgs: Record<string, string> = {
         pause: "Mentorado pausado com sucesso",
@@ -177,7 +273,10 @@ export const Admin: React.FC = () => {
       fetchInvites();
       fetchMentees();
     } catch (err: any) {
-      setFeedback({ type: "error", msg: err.message || "Erro ao executar acao" });
+      setFeedback({
+        type: "error",
+        msg: extractErrorText(err) || extractErrorText(err?.message) || "Erro ao executar acao",
+      });
     } finally {
       setActionLoading(null);
     }

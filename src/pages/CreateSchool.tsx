@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { formatAppError } from "../lib/supabase";
 import { Loader2 } from "lucide-react";
 
 interface Props {
@@ -27,14 +28,19 @@ export const CreateSchool: React.FC<Props> = ({ onBack }) => {
     }
 
     setLoading(true);
-    const result = await createSchool(
-      name.trim(),
-      Number(tuition) || 350,
-      Number(passport) || 350,
-      Number(year) || new Date().getFullYear()
-    );
-    if (result.error) setError(result.error);
-    setLoading(false);
+    try {
+      const result = await createSchool(
+        name.trim(),
+        Number(tuition) || 350,
+        Number(passport) || 350,
+        Number(year) || new Date().getFullYear()
+      );
+      if (result.error) setError(result.error);
+    } catch (error) {
+      setError(formatAppError(error, "Erro ao criar escola."));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

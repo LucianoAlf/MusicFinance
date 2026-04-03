@@ -5,6 +5,7 @@ import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
 import { Select, DatePicker, Modal, ConfirmModal, useConfirm } from "../components/ui";
 import { AvatarUploader } from "../components/ui/AvatarUploader";
+import { formatAppError } from "../lib/supabase";
 import { uploadProfessorAvatar, deleteProfessorAvatar } from "../lib/supabaseData";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
 import type { Student, Instrument, Payment, DisplayStatus } from "../types";
@@ -262,10 +263,6 @@ export const Professors = () => {
     try {
       const firstInstName = instruments.find(i => i.id === npInstIds[0])?.name || "";
       const profId = await handleAddProfessor({ name: npName.trim(), instrument: firstInstName, costPerStudent: Number(npCost) || 100, instrumentIds: npInstIds });
-      if (!profId) {
-        setNpError("Erro ao cadastrar professor. Verifique sua conexão e tente novamente.");
-        return;
-      }
       if (npAvatarBlob && schoolId) {
         const url = await uploadProfessorAvatar(npAvatarBlob, schoolId, profId);
         if (url) await handleUpdateProfessor(profId, { avatarUrl: url });
@@ -275,7 +272,7 @@ export const Professors = () => {
       setNpError("");
     } catch (e) {
       console.error("[confirmAddProf] erro ao cadastrar professor:", e);
-      setNpError("Erro ao cadastrar professor. Verifique sua conexão e tente novamente.");
+      setNpError(formatAppError(e, "Erro ao cadastrar professor."));
     } finally {
       setNpSubmitting(false);
     }
@@ -286,7 +283,7 @@ export const Professors = () => {
     setNsSubmitting(true);
     setNsError("");
     try {
-      const ok = await handleAddStudent(pid, {
+      await handleAddStudent(pid, {
         name: nsName.trim(),
         day: nsDay,
         time: nsHour,
@@ -297,17 +294,13 @@ export const Professors = () => {
         dueDay: Number(nsDueDay) || 5,
         paymentMethod: nsPayMethod || undefined,
       });
-      if (ok) {
-        setShowAddStud(null);
-        setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
-        setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
-        setNsError("");
-      } else {
-        setNsError("Erro ao cadastrar aluno. Verifique sua conexão e tente novamente.");
-      }
+      setShowAddStud(null);
+      setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
+      setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
+      setNsError("");
     } catch (e) {
       console.error("[confirmAddStudent] erro ao cadastrar aluno:", e);
-      setNsError("Erro ao cadastrar aluno. Verifique sua conexão e tente novamente.");
+      setNsError(formatAppError(e, "Erro ao cadastrar aluno."));
     } finally {
       setNsSubmitting(false);
     }
@@ -479,6 +472,9 @@ export const Professors = () => {
     setPayPopover({ profId, student: s, month: mi, payment: pm, tuition });
     setPayAmount(pm ? pm.amount.toString() : tuition.toString());
   };
+
+  const findInstrumentByName = (name: string) =>
+    instruments.find((inst) => inst.name.trim().toLowerCase() === name.trim().toLowerCase());
 
   return (
     <div className="space-y-5">
@@ -941,8 +937,19 @@ export const Professors = () => {
                 placeholder="Novo instrumento..."
                 onKeyDown={async (e) => {
                   if (e.key === "Enter" && npNewInst.trim()) {
-                    const created = await handleAddInstrument(npNewInst.trim());
-                    if (created) { setNpInstIds(prev => [...prev, created.id]); setNpNewInst(""); }
+                    const existing = findInstrumentByName(npNewInst);
+                    if (existing) {
+                      setNpInstIds(prev => prev.includes(existing.id) ? prev : [...prev, existing.id]);
+                      setNpNewInst("");
+                      return;
+                    }
+                    try {
+                      const created = await handleAddInstrument(npNewInst.trim());
+                      setNpInstIds(prev => [...prev, created.id]);
+                      setNpNewInst("");
+                    } catch (error) {
+                      setNpError(formatAppError(error, "Erro ao criar instrumento."));
+                    }
                   }
                 }}
               />
@@ -952,8 +959,19 @@ export const Professors = () => {
                   e.preventDefault();
                   e.stopPropagation();
                   if (npNewInst.trim()) {
-                    const created = await handleAddInstrument(npNewInst.trim());
-                    if (created) { setNpInstIds(prev => [...prev, created.id]); setNpNewInst(""); }
+                    const existing = findInstrumentByName(npNewInst);
+                    if (existing) {
+                      setNpInstIds(prev => prev.includes(existing.id) ? prev : [...prev, existing.id]);
+                      setNpNewInst("");
+                      return;
+                    }
+                    try {
+                      const created = await handleAddInstrument(npNewInst.trim());
+                      setNpInstIds(prev => [...prev, created.id]);
+                      setNpNewInst("");
+                    } catch (error) {
+                      setNpError(formatAppError(error, "Erro ao criar instrumento."));
+                    }
                   }
                 }}
                 className="px-3 py-1.5 rounded-lg text-[10px] font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary hover:bg-surface-tertiary/80 transition-colors"
@@ -1272,8 +1290,14 @@ export const Professors = () => {
                     placeholder="Novo instrumento..."
                     onKeyDown={async (e) => {
                       if (e.key === "Enter" && epNewInst.trim()) {
-                        const inst = await handleAddInstrument(epNewInst.trim());
-                        if (inst) { await handleAddProfessorInstrument(editProf, inst.id); setEpNewInst(""); }
+                        try {
+                          const existing = findInstrumentByName(epNewInst);
+                          const inst = existing ?? await handleAddInstrument(epNewInst.trim());
+                          await handleAddProfessorInstrument(editProf, inst.id);
+                          setEpNewInst("");
+                        } catch (error) {
+                          console.error("[EditProfessor] erro ao adicionar instrumento:", error);
+                        }
                       }
                     }}
                   />
@@ -1283,8 +1307,14 @@ export const Professors = () => {
                       e.preventDefault();
                       e.stopPropagation();
                       if (epNewInst.trim()) {
-                        const inst = await handleAddInstrument(epNewInst.trim());
-                        if (inst) { await handleAddProfessorInstrument(editProf, inst.id); setEpNewInst(""); }
+                        try {
+                          const existing = findInstrumentByName(epNewInst);
+                          const inst = existing ?? await handleAddInstrument(epNewInst.trim());
+                          await handleAddProfessorInstrument(editProf, inst.id);
+                          setEpNewInst("");
+                        } catch (error) {
+                          console.error("[EditProfessor] erro ao adicionar instrumento:", error);
+                        }
                       }
                     }}
                     className="px-3 py-1.5 rounded-lg text-[10px] font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary hover:bg-surface-tertiary/80 transition-colors"

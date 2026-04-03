@@ -31,6 +31,50 @@ const ContentSpinner = () => (
   </div>
 );
 
+function getAuthHashError(): string | null {
+  const rawHash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+
+  if (!rawHash) return null;
+
+  const params = new URLSearchParams(rawHash);
+  const error = params.get("error");
+  const errorCode = params.get("error_code");
+  const description = params.get("error_description");
+
+  if (!error && !description) return null;
+
+  if (errorCode === "otp_expired") {
+    return "Seu link de acesso expirou ou já foi usado. Peça um novo convite ou redefinição de senha.";
+  }
+
+  return description || "Não foi possível validar seu link de acesso.";
+}
+
+function shouldClearAuthHash() {
+  const rawHash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+
+  if (!rawHash) return false;
+
+  const params = new URLSearchParams(rawHash);
+  return [
+    "access_token",
+    "refresh_token",
+    "type",
+    "error",
+    "error_code",
+    "error_description",
+  ].some((key) => params.has(key));
+}
+
+function clearAuthHash() {
+  const newUrl = `${window.location.pathname}${window.location.search}`;
+  window.history.replaceState(null, "", newUrl);
+}
+
 const ErrorScreen = ({ error, onRetry, onLogout }: { error: string; onRetry: () => void; onLogout: () => void }) => (
   <div className="flex-1 flex flex-col items-center justify-center py-32 gap-4">
     <div className="text-accent-red text-lg font-semibold">Erro ao carregar dados</div>
@@ -100,6 +144,7 @@ const AppRouter = () => {
   const { user, session, loading, dataLoaded, selectedSchool, schools, schoolsLoaded, tenantId } = useAuth();
   const [showCreateSchool, setShowCreateSchool] = useState(false);
   const [needsPassword, setNeedsPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(() => getAuthHashError());
 
   React.useEffect(() => {
     if (!user) {
@@ -111,6 +156,20 @@ const AppRouter = () => {
     setNeedsPassword(needsPasswordSetup(user.id, amr));
   }, [user, session]);
 
+  React.useEffect(() => {
+    const syncAuthError = () => setAuthError(getAuthHashError());
+    window.addEventListener("hashchange", syncAuthError);
+    syncAuthError();
+    return () => window.removeEventListener("hashchange", syncAuthError);
+  }, []);
+
+  React.useEffect(() => {
+    if (user && authError && shouldClearAuthHash()) {
+      clearAuthHash();
+      setAuthError(null);
+    }
+  }, [user, authError]);
+
   // Mostrar loading enquanto:
   // 1. Auth está carregando (loading=true)
   // 2. Ou usuário logado mas dados ainda não carregaram (dataLoaded=false)
@@ -120,7 +179,7 @@ const AppRouter = () => {
 
   // Usuário não logado → Login
   if (!user) {
-    return <Login />;
+    return <Login externalError={authError} />;
   }
 
   if (needsPassword) {

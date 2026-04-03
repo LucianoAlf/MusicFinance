@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { formatAppError, supabase } from "../lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 import { markPasswordSet } from "../components/SetPasswordModal";
 
@@ -257,7 +257,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         signingIn.current = false;
-        return { error: error.message };
+        return { error: formatAppError(error, "Erro ao entrar. Tente novamente.") };
       }
 
       if (data.session?.user) {
@@ -267,8 +267,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await loadUserData(data.session.user.id);
       }
       return {};
-    } catch {
-      return { error: "Erro ao conectar. Tente novamente." };
+    } catch (error) {
+      return { error: formatAppError(error, "Erro ao conectar. Tente novamente.") };
     } finally {
       // Dar 500ms para o onAuthStateChange ter sido ignorado antes de liberar
       setTimeout(() => { signingIn.current = false; }, 500);
@@ -310,7 +310,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .select("id, tenant_id, name, year, default_tuition, passport_fee")
       .maybeSingle();
 
-    if (error) return { error: error.message };
+    if (error) return { error: formatAppError(error, "Erro ao criar escola.") };
 
     await fetchSchools();
     if (school) setSelectedSchool(school as School);

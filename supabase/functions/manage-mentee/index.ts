@@ -148,6 +148,15 @@ Deno.serve(async (req: Request) => {
       if (invitesError) return json(req, { error: invitesError.message }, 400);
     }
 
+    // Alguns usuários de teste/auditoria também podem estar vinculados como superadmin.
+    // A FK de public.superadmins -> auth.users não é cascade, então precisamos limpar
+    // esse vínculo antes de excluir o usuário do Auth.
+    const { error: superadminDeleteError } = await adminClient
+      .from("superadmins")
+      .delete()
+      .eq("user_id", userId);
+    if (superadminDeleteError) return json(req, { error: superadminDeleteError.message }, 400);
+
     const { error: linkDeleteError } = await adminClient.from("tenant_users").delete().eq("user_id", userId);
     if (linkDeleteError) return json(req, { error: linkDeleteError.message }, 400);
 

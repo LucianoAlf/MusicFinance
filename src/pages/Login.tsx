@@ -10,7 +10,7 @@ const FEATURES = [
   { icon: TrendingUp, title: "DRE Automatico", desc: "Demonstrativo de resultado com margem de contribuicao e EBITDA" },
 ];
 
-export const Login: React.FC = () => {
+export const Login: React.FC<{ externalError?: string | null }> = ({ externalError }) => {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -106,9 +106,9 @@ export const Login: React.FC = () => {
           </div>
 
           <form onSubmit={handleSubmit}>
-            {error && (
+            {(error || externalError) && (
               <div className="mb-4 p-3 rounded-xl bg-accent-red/10 border border-accent-red/20 text-accent-red text-sm">
-                {error}
+                {error || externalError}
               </div>
             )}
 

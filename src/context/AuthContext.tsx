@@ -177,10 +177,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Aguardar schools ANTES de marcar dataLoaded para evitar flash de CreateSchool
-      await fetchSchoolsForTenant(tid);
+      // Marcar dataLoaded ANTES de carregar schools — App.tsx line 206
+      // mostra LoadingScreen enquanto tenantId && !schoolsLoaded.
       setDataLoaded(true);
       dataLoadedRef.current = true;
+      void fetchSchoolsForTenant(tid);
     } catch (e) {
       console.error("[Auth] loadUserData error:", e);
       setDataLoaded(true); // Mesmo em erro, marcar como tentou carregar
@@ -218,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout: se INITIAL_SESSION não disparar em 5s,
+    // Safety timeout: se INITIAL_SESSION não disparar em 10s,
     // desbloqueia UI (mostra Login). NÃO limpar localStorage — se o token
     // refresh completar depois, INITIAL_SESSION vai setar o user normalmente.
     const safetyTimer = setTimeout(() => {
@@ -228,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDataLoaded(true);
         dataLoadedRef.current = true;
       }
-    }, 5000);
+    }, 10000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (!mounted) return;
@@ -238,7 +239,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (s?.user) {
           setSession(s);
           setUser(s.user);
-          await loadUserData(s.user.id);
+          // NÃO bloquear — loadUserData roda em background.
+          // App.tsx line 206 mostra LoadingScreen enquanto schoolsLoaded=false.
+          void loadUserData(s.user.id);
         } else {
           setDataLoaded(true);
           dataLoadedRef.current = true;

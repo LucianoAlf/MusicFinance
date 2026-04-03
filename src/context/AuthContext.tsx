@@ -72,6 +72,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadingUserData = useRef(false);
   // Flag para bloquear onAuthStateChange durante signIn
   const signingIn = useRef(false);
+  // Ref espelhando dataLoaded para uso dentro de closures sem stale-closure
+  const dataLoadedRef = useRef(!hasStoredSession());
 
   const validateSelectedSchool = useCallback((list: School[]) => {
     const stored = getStoredSchool();
@@ -105,18 +107,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchSchoolsForTenant = useCallback(async (tid: string) => {
     setSchoolsLoaded(false);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("schools")
         .select("id, tenant_id, name, year, default_tuition, passport_fee")
         .eq("tenant_id", tid)
         .order("name");
+
+      if (error) throw new Error(error.message);
 
       const list = (data ?? []) as School[];
       setSchools(list);
       validateSelectedSchool(list);
     } catch (e) {
       console.error("[Auth] fetchSchoolsForTenant error:", e);
-      setSchools([]);
+      // Retry uma vez após 1s antes de desistir
+      try {
+        await new Promise(r => setTimeout(r, 1000));
+        const { data: retryData } = await supabase
+          .from("schools")
+          .select("id, tenant_id, name, year, default_tuition, passport_fee")
+          .eq("tenant_id", tid)
+          .order("name");
+        const retryList = (retryData ?? []) as School[];
+        setSchools(retryList);
+        validateSelectedSchool(retryList);
+      } catch (retryErr) {
+        console.error("[Auth] fetchSchoolsForTenant retry failed:", retryErr);
+        setSchools([]);
+      }
     } finally {
       setSchoolsLoaded(true);
     }
@@ -155,15 +173,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSchools([]);
         setSchoolsLoaded(true);
         setDataLoaded(true);
+        dataLoadedRef.current = true;
         return;
       }
 
-      setSchoolsLoaded(false);
+      // Aguardar schools ANTES de marcar dataLoaded para evitar flash de CreateSchool
+      await fetchSchoolsForTenant(tid);
       setDataLoaded(true);
-      void fetchSchoolsForTenant(tid);
+      dataLoadedRef.current = true;
     } catch (e) {
       console.error("[Auth] loadUserData error:", e);
       setDataLoaded(true); // Mesmo em erro, marcar como tentou carregar
+      dataLoadedRef.current = true;
     } finally {
       loadingUserData.current = false;
     }
@@ -176,16 +197,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchSchools = useCallback(async (): Promise<School[]> => {
     setSchoolsLoaded(false);
-    const { data } = await supabase
-      .from("schools")
-      .select("id, tenant_id, name, year, default_tuition, passport_fee")
-      .order("name");
-    const list = (data ?? []) as School[];
-    setSchools(list);
-    setSchoolsLoaded(true);
-    validateSelectedSchool(list);
-    return list;
-  }, [validateSelectedSchool]);
+    try {
+      const { data, error } = await supabase
+        .from("schools")
+        .select("id, tenant_id, name, year, default_tuition, passport_fee")
+        .order("name");
+      if (error) throw new Error(error.message);
+      const list = (data ?? []) as School[];
+      setSchools(list);
+      validateSelectedSchool(list);
+      return list;
+    } catch (e) {
+      console.error("[Auth] fetchSchools error:", e);
+      return schools; // Manter lista anterior em vez de limpar
+    } finally {
+      setSchoolsLoaded(true);
+    }
+  }, [validateSelectedSchool, schools]);
 
   useEffect(() => {
     let mounted = true;
@@ -198,6 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn("[Auth] INITIAL_SESSION timeout — unblocking UI");
         setLoading(false);
         setDataLoaded(true);
+        dataLoadedRef.current = true;
       }
     }, 5000);
 
@@ -209,9 +238,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (s?.user) {
           setSession(s);
           setUser(s.user);
-          void loadUserData(s.user.id);
+          await loadUserData(s.user.id);
         } else {
           setDataLoaded(true);
+          dataLoadedRef.current = true;
         }
         setLoading(false);
         return;
@@ -229,6 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSchoolsLoaded(true);
         setSelectedSchoolState(null);
         setDataLoaded(false);
+        dataLoadedRef.current = false;
         localStorage.removeItem(SCHOOL_STORAGE_KEY);
         return;
       }
@@ -237,7 +268,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (s?.user) {
         setSession(s);
         setUser(s.user);
-        if (event === "SIGNED_IN") {
+        // Pular loadUserData se INITIAL_SESSION já carregou (evita duplicata no invite flow)
+        if (event === "SIGNED_IN" && !dataLoadedRef.current) {
           await loadUserData(s.user.id);
         }
       }
@@ -263,7 +295,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.session?.user) {
         setSession(data.session);
         setUser(data.session.user);
-        markPasswordSet(data.session.user.id);
+        void markPasswordSet(data.session.user.id);
         await loadUserData(data.session.user.id);
       }
       return {};
@@ -285,6 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSchoolsLoaded(false);
     setSelectedSchoolState(null);
     setDataLoaded(false);
+    dataLoadedRef.current = false;
     localStorage.removeItem(SCHOOL_STORAGE_KEY);
 
     try {

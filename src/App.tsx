@@ -153,7 +153,7 @@ const AppRouter = () => {
     }
 
     const amr = (session as any)?.amr as Array<{ method: string }> | undefined;
-    setNeedsPassword(needsPasswordSetup(user.id, amr));
+    setNeedsPassword(needsPasswordSetup(user.id, amr, user.user_metadata));
   }, [user, session]);
 
   React.useEffect(() => {

@@ -162,7 +162,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setInstruments(dataResult.instruments);
       } else {
         // Retry uma vez antes de desistir
-        console.warn("[Data] RPC retornou null, tentando novamente em 1s...");
+        console.warn("[Data] RPC retornou null/error:", dataResult.error, "— tentando novamente em 1s...");
         await new Promise(r => setTimeout(r, 1000));
         const retryResult = await loadSchoolData(schoolId);
         if (retryResult.data) {
@@ -171,7 +171,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setInstruments(retryResult.instruments);
         } else {
           console.error("[Data] fetchAllData falhou após retry:", retryResult.error);
-          setDataError(retryResult.error || "Não foi possível carregar os dados da escola. Tente fazer login novamente.");
+          const errCode = retryResult.error || "";
+          if (errCode === "session_expired") {
+            setDataError("Sua sessão expirou. Faça login novamente.");
+          } else if (errCode === "school_not_found") {
+            setDataError("Escola não encontrada. Selecione outra escola.");
+          } else if (errCode === "permission_denied") {
+            setDataError("Sem permissão para acessar esta escola.");
+          } else {
+            setDataError(errCode || "Não foi possível carregar os dados da escola. Tente fazer login novamente.");
+          }
           // NÃO fazer setData(null) — manter dados anteriores se existirem
         }
       }

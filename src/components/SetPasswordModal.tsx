@@ -10,28 +10,43 @@ interface SetPasswordModalProps {
 
 const PASS_SET_PREFIX = "musicfinance-password-set-";
 
-/** Verifica se o usuário já definiu senha (localStorage) */
-export function hasPasswordSet(userId: string): boolean {
-  return localStorage.getItem(PASS_SET_PREFIX + userId) === "1";
+/** Verifica se o usuário já definiu senha (localStorage + user_metadata) */
+export function hasPasswordSet(userId: string, userMetadata?: Record<string, unknown>): boolean {
+  if (localStorage.getItem(PASS_SET_PREFIX + userId) === "1") return true;
+  if (userMetadata?.password_set === true) {
+    // Sincronizar localStorage com backend para consultas futuras
+    localStorage.setItem(PASS_SET_PREFIX + userId, "1");
+    return true;
+  }
+  return false;
 }
 
-/** Marca que o usuário definiu senha */
-export function markPasswordSet(userId: string): void {
+/** Marca que o usuário definiu senha (localStorage + user_metadata) */
+export async function markPasswordSet(userId: string): Promise<void> {
   localStorage.setItem(PASS_SET_PREFIX + userId, "1");
+  try {
+    await supabase.auth.updateUser({ data: { password_set: true } });
+  } catch (e) {
+    console.error("[Auth] markPasswordSet user_metadata error:", e);
+  }
 }
 
 /**
  * Detecta se o usuário precisa definir senha.
  * Retorna true se o usuário entrou via magic link/invite e ainda não definiu senha.
  */
-export function needsPasswordSetup(userId: string, amr?: Array<{ method: string }>): boolean {
-  if (hasPasswordSet(userId)) return false;
+export function needsPasswordSetup(
+  userId: string,
+  amr?: Array<{ method: string }>,
+  userMetadata?: Record<string, unknown>,
+): boolean {
+  if (hasPasswordSet(userId, userMetadata)) return false;
   // Se não tem amr, não sabemos — assume que precisa se nunca marcou
   if (!amr || amr.length === 0) return true;
   // Se tem "password" nos métodos, já definiu senha
   const hasPassword = amr.some((a) => a.method === "password");
   if (hasPassword) {
-    markPasswordSet(userId);
+    void markPasswordSet(userId);
     return false;
   }
   return true;
@@ -61,9 +76,9 @@ export const SetPasswordModal: React.FC<SetPasswordModalProps> = ({ email, onCom
       } else {
         setStatus("success");
         setMsg("Senha definida com sucesso!");
-        // Marca no localStorage
+        // Marca no localStorage + user_metadata
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) markPasswordSet(user.id);
+        if (user) void markPasswordSet(user.id);
         setTimeout(onComplete, 1200);
       }
     } catch (err: any) {

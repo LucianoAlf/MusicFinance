@@ -40,9 +40,21 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
   });
   console.timeEnd("[RPC] get_school_dashboard");
 
-  if (error || !raw?.school) {
-    console.error("[RPC] get_school_dashboard error:", error?.message, "raw:", raw);
-    return { data: null, slugMap: {}, instruments: [], error: error?.message || "School not found" };
+  if (error) {
+    console.error("[RPC] get_school_dashboard error:", error.message, error.code);
+    const msg = (error.message || "").toLowerCase();
+    const code = error.code || "";
+    if (msg.includes("jwt") || msg.includes("token") || code === "PGRST301") {
+      return { data: null, slugMap: {}, instruments: [], error: "session_expired" };
+    }
+    if (msg.includes("permission") || msg.includes("row-level security") || code === "42501") {
+      return { data: null, slugMap: {}, instruments: [], error: "permission_denied" };
+    }
+    return { data: null, slugMap: {}, instruments: [], error: error.message || "Erro ao carregar dados" };
+  }
+  if (!raw?.school) {
+    console.error("[RPC] get_school_dashboard: school not found in response", raw);
+    return { data: null, slugMap: {}, instruments: [], error: "school_not_found" };
   }
 
   // raw já contém todos os dados agregados pelo Postgres
@@ -183,7 +195,15 @@ export async function loadKpisRPC(schoolId: string, year: number) {
   });
 
   if (error || !raw) {
-    return { kpis: [], breakeven: [], avgTenure: null, error: error?.message };
+    const msg = (error?.message || "").toLowerCase();
+    const code = error?.code || "";
+    let classifiedError = error?.message || "Erro ao carregar KPIs";
+    if (msg.includes("jwt") || msg.includes("token") || code === "PGRST301") {
+      classifiedError = "session_expired";
+    } else if (msg.includes("permission") || msg.includes("row-level security") || code === "42501") {
+      classifiedError = "permission_denied";
+    }
+    return { kpis: [], breakeven: [], avgTenure: null, error: classifiedError };
   }
 
   return {

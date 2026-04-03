@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
+import { getProfessorCompensationLabel, getProfessorPayrollAmount } from "../lib/professorCompensation";
 import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
 import { Select, DatePicker, Modal, ConfirmModal, useConfirm } from "../components/ui";
@@ -8,7 +9,7 @@ import { AvatarUploader } from "../components/ui/AvatarUploader";
 import { formatAppError } from "../lib/supabase";
 import { uploadProfessorAvatar, deleteProfessorAvatar } from "../lib/supabaseData";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
-import type { Student, Instrument, Payment, DisplayStatus } from "../types";
+import type { Student, Instrument, Payment, DisplayStatus, Professor, ProfessorCompensationType } from "../types";
 import { ProfessorStatement } from "../components/ProfessorStatement";
 import {
   Users,
@@ -59,6 +60,10 @@ function calcPermanencia(enrollmentDate: string | undefined): string {
 }
 
 const DAY_OPTIONS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map((d) => ({ value: d, label: d }));
+const COMPENSATION_OPTIONS = [
+  { value: "per_student", label: "Custo por aluno" },
+  { value: "hourly", label: "Hora-aula" },
+];
 
 const AVATARS_F = ["/Avatar_Menina_GenZ.svg", "/Avatar_Menina2_GenZ.svg"];
 const AVATARS_M = ["/Avatar_Menino_GenZ.svg", "/Avatar_Menino2_GenZ.svg"];
@@ -127,7 +132,10 @@ export const Professors = () => {
 
   // Add professor form
   const [npName, setNpName] = useState("");
+  const [npCompensationType, setNpCompensationType] = useState<ProfessorCompensationType>("per_student");
   const [npCost, setNpCost] = useState("100");
+  const [npHourlyRate, setNpHourlyRate] = useState("60");
+  const [npLessonDuration, setNpLessonDuration] = useState("60");
   const [npInstIds, setNpInstIds] = useState<string[]>([]);
   const [npNewInst, setNpNewInst] = useState("");
   const [npAvatarBlob, setNpAvatarBlob] = useState<Blob | null>(null);
@@ -164,7 +172,10 @@ export const Professors = () => {
 
   // Edit professor modal state
   const [epName, setEpName] = useState("");
+  const [epCompensationType, setEpCompensationType] = useState<ProfessorCompensationType>("per_student");
   const [epCost, setEpCost] = useState("");
+  const [epHourlyRate, setEpHourlyRate] = useState("");
+  const [epLessonDuration, setEpLessonDuration] = useState("");
   const [epNewInst, setEpNewInst] = useState("");
   const [epAvatarBlob, setEpAvatarBlob] = useState<Blob | null>(null);
   const [epAvatarRemoved, setEpAvatarRemoved] = useState(false);
@@ -242,7 +253,7 @@ export const Professors = () => {
       const pm = s.payments && s.payments[curMo];
       if (pm && pm.status === "PAID" && pm.amount > 0) { _tR += pm.amount; _paidPersonIds.add(s.personId || s.id); }
     });
-    _tF += activeCount * p.costPerStudent;
+    _tF += getProfessorPayrollAmount(p, data.config.year, curMo);
   });
   _tA = _allPersonIds.size;
   const _tPg = _paidPersonIds.size;
@@ -262,13 +273,21 @@ export const Professors = () => {
     setNpError("");
     try {
       const firstInstName = instruments.find(i => i.id === npInstIds[0])?.name || "";
-      const profId = await handleAddProfessor({ name: npName.trim(), instrument: firstInstName, costPerStudent: Number(npCost) || 100, instrumentIds: npInstIds });
+      const profId = await handleAddProfessor({
+        name: npName.trim(),
+        instrument: firstInstName,
+        compensationType: npCompensationType,
+        costPerStudent: npCompensationType === "per_student" ? Number(npCost) || 0 : 0,
+        hourlyRate: npCompensationType === "hourly" ? Number(npHourlyRate) || 0 : 0,
+        lessonDurationMinutes: npCompensationType === "hourly" ? Number(npLessonDuration) || 60 : 60,
+        instrumentIds: npInstIds,
+      });
       if (npAvatarBlob && schoolId) {
         const url = await uploadProfessorAvatar(npAvatarBlob, schoolId, profId);
         if (url) await handleUpdateProfessor(profId, { avatarUrl: url });
       }
       setShowAddProf(false);
-      setNpName(""); setNpCost("100"); setNpInstIds([]); setNpNewInst(""); setNpAvatarBlob(null);
+      setNpName(""); setNpCompensationType("per_student"); setNpCost("100"); setNpHourlyRate("60"); setNpLessonDuration("60"); setNpInstIds([]); setNpNewInst(""); setNpAvatarBlob(null);
       setNpError("");
     } catch (e) {
       console.error("[confirmAddProf] erro ao cadastrar professor:", e);
@@ -438,10 +457,13 @@ export const Professors = () => {
     });
   };
 
-  const openEditProf = (p: { id: string; name: string; costPerStudent: number }) => {
+  const openEditProf = (p: Professor) => {
     setEditProf(p.id);
     setEpName(p.name);
+    setEpCompensationType(p.compensationType);
     setEpCost(p.costPerStudent.toString());
+    setEpHourlyRate(p.hourlyRate.toString());
+    setEpLessonDuration(p.lessonDurationMinutes.toString());
     setEpNewInst("");
     setEpAvatarBlob(null);
     setEpAvatarRemoved(false);
@@ -449,12 +471,30 @@ export const Professors = () => {
 
   const saveEditProf = async () => {
     if (!editProf || !schoolId) return;
-    const updates: { name?: string; costPerStudent?: number; avatarUrl?: string | null } = {};
+    const updates: {
+      name?: string;
+      compensationType?: ProfessorCompensationType;
+      costPerStudent?: number;
+      hourlyRate?: number;
+      lessonDurationMinutes?: number;
+      avatarUrl?: string | null;
+    } = {};
     const currentProf = data.professors.find(p => p.id === editProf);
     if (!currentProf) return;
     if (epName.trim() && epName.trim() !== currentProf.name) updates.name = epName.trim();
+    if (epCompensationType !== currentProf.compensationType) updates.compensationType = epCompensationType;
     const newCost = Number(epCost);
-    if (newCost > 0 && newCost !== currentProf.costPerStudent) updates.costPerStudent = newCost;
+    const newHourlyRate = Number(epHourlyRate);
+    const newLessonDuration = Number(epLessonDuration);
+    if (epCompensationType === "per_student" && newCost >= 0 && newCost !== currentProf.costPerStudent) {
+      updates.costPerStudent = newCost;
+    }
+    if (epCompensationType === "hourly" && newHourlyRate >= 0 && newHourlyRate !== currentProf.hourlyRate) {
+      updates.hourlyRate = newHourlyRate;
+    }
+    if (epCompensationType === "hourly" && newLessonDuration > 0 && newLessonDuration !== currentProf.lessonDurationMinutes) {
+      updates.lessonDurationMinutes = newLessonDuration;
+    }
     if (epAvatarBlob) {
       const url = await uploadProfessorAvatar(epAvatarBlob, schoolId, editProf);
       if (url) updates.avatarUrl = url;
@@ -531,9 +571,9 @@ export const Professors = () => {
         <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
           {data.professors.map((p, profIdx) => {
             const pay = p.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length;
-            const activeForProf = p.students.filter((s) => s.situation === "Ativo").length;
             const rev = p.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0);
-            const pp = rev > 0 ? (activeForProf * p.costPerStudent) / rev : 0;
+            const payroll = getProfessorPayrollAmount(p, data.config.year, curMo);
+            const pp = rev > 0 ? payroll / rev : 0;
             const ticketProf = pay > 0 ? rev / pay : 0;
             const prevRev = curMo > 0 ? p.students.reduce((sum, s) => { const pm = s.payments?.[curMo - 1]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0) : null;
             const trendProf = prevRev != null && prevRev > 0 ? ((rev - prevRev) / prevRev) * 100 : null;
@@ -563,7 +603,7 @@ export const Professors = () => {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-text-primary">{p.name}</p>
-                      <p className="text-[10px] text-text-secondary">{p.instruments.length > 0 ? p.instruments.map(i => i.name).join(", ") : p.instrument} · {p.students.length} al. · {pay} pag.</p>
+                      <p className="text-[10px] text-text-secondary">{p.instruments.length > 0 ? p.instruments.map(i => i.name).join(", ") : p.instrument} · {getProfessorCompensationLabel(p)} · {p.students.length} al. · {pay} pag.</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -598,12 +638,15 @@ export const Professors = () => {
                       className="font-bold text-lg border-none bg-transparent cursor-pointer p-0 text-left transition-colors text-text-primary hover:text-accent-blue"
                     >{prof.name}</button>
                     <p className="text-[11px] text-text-tertiary tracking-wide mt-0.5">
-                      {prof.instruments.length > 0 ? prof.instruments.map(i => i.name).join(", ") : prof.instrument} · R$ {prof.costPerStudent}/aluno · {prof.students.length} alunos · {prof.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length} pagantes
+                      {prof.instruments.length > 0 ? prof.instruments.map(i => i.name).join(", ") : prof.instrument} · {getProfessorCompensationLabel(prof)} · {prof.students.length} alunos · {prof.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length} pagantes
                     </p>
                     <p className="text-[11px] font-mono font-medium text-accent-green mt-1">
                       Receita {MS[curMo]}: {brl(prof.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0))}
                       <span className="ml-3 text-accent-blue">
                         Ticket: {brl((() => { const payP = prof.students.filter((s) => { const pm = s.payments?.[curMo]; return pm && pm.status === "PAID" && pm.amount > 0; }).length; const revP = prof.students.reduce((sum, s) => { const pm = s.payments?.[curMo]; return sum + (pm && pm.status === "PAID" ? pm.amount : 0); }, 0); return payP > 0 ? revP / payP : 0; })())}
+                      </span>
+                      <span className="ml-3 text-accent-red">
+                        Folha {MS[curMo]}: {brl(getProfessorPayrollAmount(prof, data.config.year, curMo))}
                       </span>
                     </p>
                   </div>
@@ -981,9 +1024,35 @@ export const Professors = () => {
             </div>
           </div>
           <div>
-            <label className={lbl}>Custo por Aluno (R$)</label>
-            <input type="number" value={npCost} onChange={(e) => setNpCost(e.target.value)} className={inp} />
+            <label className={lbl}>Forma de Pagamento</label>
+            <Select
+              value={npCompensationType}
+              onValueChange={(value) => setNpCompensationType(value as ProfessorCompensationType)}
+              options={COMPENSATION_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            />
           </div>
+          {npCompensationType === "per_student" ? (
+            <div>
+              <label className={lbl}>Custo por Aluno (R$)</label>
+              <input type="number" value={npCost} onChange={(e) => setNpCost(e.target.value)} className={inp} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Hora-Aula (R$)</label>
+                <input type="number" value={npHourlyRate} onChange={(e) => setNpHourlyRate(e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Duração da Aula (min)</label>
+                <input type="number" value={npLessonDuration} onChange={(e) => setNpLessonDuration(e.target.value)} className={inp} />
+              </div>
+            </div>
+          )}
+          {npCompensationType === "hourly" && (
+            <p className="text-[10px] text-text-tertiary">
+              A folha mensal será calculada automaticamente pelas aulas previstas do mês, com possibilidade de ajuste manual no extrato do professor.
+            </p>
+          )}
         </div>
         {npError && <p className="text-accent-red text-xs mt-4 mb-0">{npError}</p>}
         <div className="flex gap-2 mt-6">
@@ -1256,9 +1325,30 @@ export const Professors = () => {
                 <input value={epName} onChange={(e) => setEpName(e.target.value)} className={inp} autoFocus />
               </div>
               <div>
-                <label className={lbl}>Custo por Aluno (R$)</label>
-                <input type="number" value={epCost} onChange={(e) => setEpCost(e.target.value)} className={inp} />
+                <label className={lbl}>Forma de Pagamento</label>
+                <Select
+                  value={epCompensationType}
+                  onValueChange={(value) => setEpCompensationType(value as ProfessorCompensationType)}
+                  options={COMPENSATION_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                />
               </div>
+              {epCompensationType === "per_student" ? (
+                <div>
+                  <label className={lbl}>Custo por Aluno (R$)</label>
+                  <input type="number" value={epCost} onChange={(e) => setEpCost(e.target.value)} className={inp} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={lbl}>Hora-Aula (R$)</label>
+                    <input type="number" value={epHourlyRate} onChange={(e) => setEpHourlyRate(e.target.value)} className={inp} />
+                  </div>
+                  <div>
+                    <label className={lbl}>Duração da Aula (min)</label>
+                    <input type="number" value={epLessonDuration} onChange={(e) => setEpLessonDuration(e.target.value)} className={inp} />
+                  </div>
+                </div>
+              )}
               <div>
                 <label className={lbl}>Instrumentos</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">

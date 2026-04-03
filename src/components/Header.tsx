@@ -2,11 +2,34 @@ import React from "react";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/utils";
-import { CheckCircle, Loader2, LogOut, Moon, Sun } from "lucide-react";
+import { AlertCircle, CheckCircle, Loader2, LogOut, Moon, Sun } from "lucide-react";
 
 export const Header = () => {
   const { dark, setDark, saveStatus } = useData();
   const { signOut, selectedSchool } = useAuth();
+
+  const statusBadge = (() => {
+    if (saveStatus === "idle") return null;
+    if (saveStatus === "saving") {
+      return {
+        className: "bg-accent-amber/10 text-accent-amber",
+        icon: <Loader2 size={12} className="animate-spin" />,
+        label: "Salvando...",
+      };
+    }
+    if (saveStatus === "error") {
+      return {
+        className: "bg-accent-red/10 text-accent-red",
+        icon: <AlertCircle size={12} />,
+        label: "Erro ao salvar",
+      };
+    }
+    return {
+      className: "bg-accent-green/10 text-accent-green",
+      icon: <CheckCircle size={12} />,
+      label: "Salvo",
+    };
+  })();
 
   return (
     <header
@@ -16,17 +39,17 @@ export const Header = () => {
       )}
     >
       <div className="flex items-center gap-3">
-        <span
-          className={cn(
-            "text-[10px] px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all font-medium",
-            saveStatus === "saving"
-              ? "bg-accent-amber/10 text-accent-amber"
-              : "bg-accent-green/10 text-accent-green"
-          )}
-        >
-          {saveStatus === "saving" ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-          <span>{saveStatus === "saving" ? "Salvando..." : "Salvo"}</span>
-        </span>
+        {statusBadge && (
+          <span
+            className={cn(
+              "text-[10px] px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all font-medium",
+              statusBadge.className
+            )}
+          >
+            {statusBadge.icon}
+            <span>{statusBadge.label}</span>
+          </span>
+        )}
         {selectedSchool && (
           <span className="text-xs text-text-tertiary font-medium">
             {selectedSchool.name}

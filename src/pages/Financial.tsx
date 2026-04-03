@@ -311,7 +311,7 @@ export const Financial = () => {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between py-2 px-3 rounded-lg border bg-surface-tertiary border-border-secondary">
               <span className="text-[11px] font-medium text-text-secondary">
-                Folha Prof. (auto)
+                Folha Prof.
               </span>
               <span className="text-[11px] font-mono font-medium text-accent-red">
                 {brl(calc.profPayroll)}

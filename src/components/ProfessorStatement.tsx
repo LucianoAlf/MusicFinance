@@ -1,4 +1,10 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useData } from "../context/DataContext";
+import {
+  getProfessorCompensationLabel,
+  getProfessorPayrollDetails,
+  getProfessorStudentCostAllocation,
+} from "../lib/professorCompensation";
 import type { Professor } from "../types";
 import { brl, MF, cn } from "../lib/utils";
 import { Copy, Check, FileText } from "lucide-react";
@@ -12,16 +18,25 @@ interface Props {
 }
 
 export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, schoolName, onClose }) => {
+  const { handleSetProfessorPayrollOverride } = useData();
   const [copied, setCopied] = React.useState(false);
+  const [overrideValue, setOverrideValue] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
+  const payroll = useMemo(() => getProfessorPayrollDetails(professor, year, month), [professor, year, month]);
+
+  useEffect(() => {
+    setOverrideValue(payroll.overrideAmount != null ? payroll.overrideAmount.toString() : "");
+  }, [payroll.overrideAmount, professor.id, month]);
 
   const statement = useMemo(() => {
+    const allocation = getProfessorStudentCostAllocation(professor, year, month);
     const rows = professor.students
       .filter((s) => s.situation === "Ativo" || (s.payments[month] && s.payments[month]!.status === "PAID"))
       .map((s) => {
         const pm = s.payments[month];
         const paid = pm && pm.status === "PAID" ? pm.amount : 0;
         const expected = s.tuitionAmount || 0;
-        const cost = professor.costPerStudent;
+        const cost = allocation.get(s.id) || 0;
         return {
           name: s.name,
           instrument: s.instrumentName || "—",
@@ -37,11 +52,11 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
     const totalExpected = rows.reduce((s, r) => s + r.expected, 0);
     const totalPaid = rows.reduce((s, r) => s + r.paid, 0);
     const activeCount = rows.filter((r) => r.isActive).length;
-    const totalCost = activeCount * professor.costPerStudent;
+    const totalCost = payroll.amount;
     const paidCount = rows.filter((r) => r.paid > 0).length;
 
     return { rows, totalExpected, totalPaid, totalCost, paidCount, activeCount };
-  }, [professor, month]);
+  }, [professor, month, payroll.amount, year]);
 
   // WhatsApp: versão simplificada só para o professor
   const whatsappText = useMemo(() => {
@@ -57,17 +72,48 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
     });
     lines.push("");
     lines.push(`💰 *Resumo*`);
-    lines.push(`• Valor por aluno: ${brl(professor.costPerStudent)}`);
-    lines.push(`• Total de alunos: ${statement.activeCount}`);
+    lines.push(`• Modelo: ${getProfessorCompensationLabel(professor)}`);
+    if (professor.compensationType === "hourly") {
+      lines.push(`• Aulas previstas: ${payroll.lessonCount}`);
+    } else {
+      lines.push(`• Total de alunos ativos: ${statement.activeCount}`);
+    }
+    if (payroll.overrideAmount != null) {
+      lines.push(`• Ajuste manual aplicado: ${brl(payroll.overrideAmount)}`);
+    }
     lines.push("");
     lines.push(`✅ *TOTAL A RECEBER: ${brl(statement.totalCost)}*`);
     return lines.join("\n");
-  }, [professor, month, year, schoolName, statement]);
+  }, [professor, month, year, schoolName, statement, payroll]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(whatsappText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const saveOverride = async () => {
+    const parsed = overrideValue.trim() === "" ? null : Number(overrideValue);
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
+      return;
+    }
+
+    setSavingOverride(true);
+    try {
+      await handleSetProfessorPayrollOverride(professor.id, month, parsed);
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const clearOverride = async () => {
+    setOverrideValue("");
+    setSavingOverride(true);
+    try {
+      await handleSetProfessorPayrollOverride(professor.id, month, null);
+    } finally {
+      setSavingOverride(false);
+    }
   };
 
   return (
@@ -81,6 +127,57 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
               {MF[month]} {year} · {professor.instruments.map((i) => i.name).join(", ") || professor.instrument}
             </p>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border-primary bg-surface-tertiary px-4 py-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-1">Modelo</p>
+            <p className="text-xs font-medium text-text-primary">{getProfessorCompensationLabel(professor)}</p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-1">Cálculo Automático</p>
+            <p className="text-xs font-mono font-bold text-text-primary">{brl(payroll.autoAmount)}</p>
+            {professor.compensationType === "hourly" && (
+              <p className="text-[10px] text-text-tertiary">{payroll.lessonCount} aulas previstas no mês</p>
+            )}
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-1">Folha Final</p>
+            <p className="text-xs font-mono font-bold text-accent-red">{brl(payroll.amount)}</p>
+            <p className="text-[10px] text-text-tertiary">
+              {payroll.payrollSource === "override" ? "Com ajuste manual aplicado" : "Sem ajuste manual"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-col md:flex-row gap-2 md:items-end">
+          <div className="flex-1">
+            <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-1">Ajuste Manual do Mês</p>
+            <input
+              type="number"
+              value={overrideValue}
+              onChange={(e) => setOverrideValue(e.target.value)}
+              placeholder="Deixe vazio para usar o cálculo automático"
+              className="w-full px-3 py-2 rounded-lg text-xs border bg-surface-secondary border-border-secondary text-text-primary focus:outline-none focus:ring-1 focus:ring-border-hover"
+            />
+          </div>
+          <button
+            onClick={saveOverride}
+            disabled={savingOverride}
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-primary-btn-bg text-primary-btn-text border-none cursor-pointer hover:opacity-90 disabled:opacity-50"
+          >
+            {savingOverride ? "Salvando..." : "Salvar Ajuste"}
+          </button>
+          {payroll.overrideAmount != null && (
+            <button
+              onClick={clearOverride}
+              disabled={savingOverride}
+              className="px-4 py-2 rounded-lg text-xs font-medium bg-surface-secondary text-text-secondary border border-border-secondary cursor-pointer hover:text-text-primary"
+            >
+              Remover Ajuste
+            </button>
+          )}
         </div>
       </div>
 
@@ -144,7 +241,11 @@ export const ProfessorStatement: React.FC<Props> = ({ professor, month, year, sc
             <div>
               <p className="text-[9px] uppercase tracking-wider text-text-tertiary mb-0.5">Folha Prof.</p>
               <p className="text-sm font-mono font-bold text-accent-red">{brl(statement.totalCost)}</p>
-              <p className="text-[9px] text-text-tertiary">{brl(professor.costPerStudent)}/al. × {statement.activeCount}</p>
+              <p className="text-[9px] text-text-tertiary">
+                {professor.compensationType === "hourly"
+                  ? `${payroll.lessonCount} aulas · ${getProfessorCompensationLabel(professor)}`
+                  : `${brl(professor.costPerStudent)}/al. × ${statement.activeCount}`}
+              </p>
             </div>
           </div>
         </div>

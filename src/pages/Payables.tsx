@@ -3,6 +3,7 @@ import { useData } from "../context/DataContext";
 import { MonthSelector } from "../components/MonthSelector";
 import { Select, DatePicker, Modal, ConfirmModal, useConfirm } from "../components/ui";
 import { brl, MS, MF, cn } from "../lib/utils";
+import { createExpenseAllocationUpdate, isBillInCompetenceMonth } from "../lib/payables";
 import {
   Plus,
   Trash2,
@@ -13,7 +14,7 @@ import {
   CreditCard,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { PayableBill } from "../types";
+import { ExpenseAllocationUpdate, PayableBill } from "../types";
 
 const COLORS = ["#0ea5e9", "#f97316", "#ec4899", "#84cc16", "#64748b", "#8b5cf6", "#14b8a6", "#f43f5e"];
 
@@ -39,6 +40,8 @@ export const Payables = () => {
   const [isNewEi, setIsNewEi] = useState(false);
   const [newEiName, setNewEiName] = useState("");
   const [formError, setFormError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [isSubmittingNewBill, setIsSubmittingNewBill] = useState(false);
 
   const [editingBill, setEditingBill] = useState<PayableBill | null>(null);
   const [editDesc, setEditDesc] = useState("");
@@ -49,6 +52,8 @@ export const Payables = () => {
   const [editEiId, setEditEiId] = useState("");
   const [editStatus, setEditStatus] = useState<"PENDING" | "PAID">("PENDING");
   const [editCompMo, setEditCompMo] = useState("");
+  const [editFormError, setEditFormError] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const { state: confirmState, confirm, close: confirmClose } = useConfirm();
 
@@ -58,13 +63,7 @@ export const Payables = () => {
   const inp = "w-full px-3 py-2.5 rounded-lg text-xs border focus:outline-none focus:ring-1 focus:ring-border-hover transition-all bg-surface-tertiary border-border-secondary text-text-primary";
   const lbl = "text-[10px] mb-1 block font-semibold text-text-secondary uppercase tracking-wider";
 
-  const curMonthBills = data.payableBills.filter((b) => {
-    if (b.competenceMonth !== undefined && b.competenceYear !== undefined) {
-      return b.competenceMonth === curMo && b.competenceYear === data.config.year;
-    }
-    const d = new Date(b.dueDate + "T12:00:00");
-    return d.getMonth() === curMo && d.getFullYear() === data.config.year;
-  });
+  const curMonthBills = data.payableBills.filter((b) => isBillInCompetenceMonth(b, curMo, data.config.year));
 
   const totalMonth = curMonthBills.reduce((acc, b) => acc + b.amount, 0);
   const totalPaid = curMonthBills.filter((b) => b.status === "PAID").reduce((acc, b) => acc + b.amount, 0);
@@ -82,6 +81,7 @@ export const Payables = () => {
 
   const handleSaveBill = async () => {
     setFormError("");
+    setPageError("");
     if (!desc.trim()) { setFormError("Preencha a descrição."); return; }
     if (!dueDate) { setFormError("Selecione a data de vencimento."); return; }
     if (!amount || Number(amount) <= 0) { setFormError("Informe o valor."); return; }
@@ -112,7 +112,7 @@ export const Payables = () => {
     const startMonth = baseDate.getMonth();
 
     const billsToCreate: PayableBill[] = [];
-    const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
+    const expenseUpdates: ExpenseAllocationUpdate[] = [];
     const groupId = crypto.randomUUID();
     const baseAmount = Number(amount);
     const compMo = Number(competenceMonth);
@@ -139,11 +139,19 @@ export const Payables = () => {
         competenceMonth: compMo,
         competenceYear: compYr,
       });
-      if (hasExpenseItem && baseDate.getFullYear() === data.config.year) {
-        expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: startMonth, delta: baseAmount });
+      if (hasExpenseItem) {
+        const update = createExpenseAllocationUpdate({
+          ...baseBill,
+          amount: baseAmount,
+          dueDate,
+          competenceMonth: compMo,
+          competenceYear: compYr,
+        }, baseAmount, data.config.year);
+        if (update) expenseUpdates.push(update);
       }
     } else if (type === "INSTALLMENT") {
       const instCount = Number(installments);
+      if (!instCount || instCount < 2) { setFormError("Informe um número válido de parcelas."); return; }
       const installmentAmount = baseAmount / instCount;
       for (let i = 0; i < instCount; i++) {
         const d = new Date(baseDate);
@@ -165,7 +173,16 @@ export const Payables = () => {
             competenceMonth: d.getMonth(),
             competenceYear: d.getFullYear(),
           });
-          if (hasExpenseItem) expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: d.getMonth(), delta: installmentAmount });
+          if (hasExpenseItem) {
+            const update = createExpenseAllocationUpdate({
+              ...baseBill,
+              amount: installmentAmount,
+              dueDate: d.toISOString().split("T")[0],
+              competenceMonth: d.getMonth(),
+              competenceYear: d.getFullYear(),
+            }, installmentAmount, data.config.year);
+            if (update) expenseUpdates.push(update);
+          }
         }
       }
     } else {
@@ -185,13 +202,34 @@ export const Payables = () => {
           competenceMonth: i,
           competenceYear: data.config.year,
         });
-        if (hasExpenseItem) expenseUpdates.push({ ccId: finalCcId, eiId: finalEiId, month: i, delta: baseAmount });
+        if (hasExpenseItem) {
+          const update = createExpenseAllocationUpdate({
+            ...baseBill,
+            amount: baseAmount,
+            dueDate: d.toISOString().split("T")[0],
+            competenceMonth: i,
+            competenceYear: data.config.year,
+          }, baseAmount, data.config.year);
+          if (update) expenseUpdates.push(update);
+        }
       }
     }
 
-    setShowModal(false);
-    resetForm();
-    handleSaveBills(billsToCreate, expenseUpdates);
+    if (billsToCreate.length === 0) {
+      setFormError("Nenhuma conta foi gerada para o ano selecionado.");
+      return;
+    }
+
+    setIsSubmittingNewBill(true);
+    try {
+      await handleSaveBills(billsToCreate, expenseUpdates);
+      setShowModal(false);
+      resetForm();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Erro ao salvar contas.");
+    } finally {
+      setIsSubmittingNewBill(false);
+    }
   };
 
   const resetForm = () => {
@@ -205,14 +243,17 @@ export const Payables = () => {
   const toggleStatus = (billId: string) => { handleToggleBillStatus(billId); };
 
   const performDeleteBills = async (bills: PayableBill[]) => {
-    const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
+    setPageError("");
+    const expenseUpdates: ExpenseAllocationUpdate[] = [];
     bills.forEach((b) => {
-      const billMonth = new Date(b.dueDate + "T12:00:00").getMonth();
-      if (b.costCenterId && b.expenseItemId) {
-        expenseUpdates.push({ ccId: b.costCenterId, eiId: b.expenseItemId, month: billMonth, delta: -b.amount });
-      }
+      const update = createExpenseAllocationUpdate(b, -b.amount, data.config.year);
+      if (update) expenseUpdates.push(update);
     });
-    await handleDeleteBills(bills.map((b) => b.id), expenseUpdates);
+    try {
+      await handleDeleteBills(bills.map((b) => b.id), expenseUpdates);
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Erro ao excluir conta.");
+    }
   };
 
   const deleteBill = (billId: string) => {
@@ -244,38 +285,60 @@ export const Payables = () => {
   };
 
   const saveEdit = async () => {
-    if (!editingBill || !editDesc.trim() || !editAmount || !editDate) return;
+    setEditFormError("");
+    setPageError("");
+    if (!editingBill || !editDesc.trim() || !editAmount || !editDate) {
+      setEditFormError("Preencha os campos obrigatórios.");
+      return;
+    }
 
     const newAmt = Number(editAmount);
-    const oldMonth = new Date(editingBill.dueDate + "T12:00:00").getMonth();
     const newMonth = Number(editCompMo);
 
-    const expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }> = [];
+    const expenseUpdates: ExpenseAllocationUpdate[] = [];
     
     const oldEiId = editingBill.expenseItemId;
     const newEiId = editEiId || "";
     const oldCcId = editingBill.costCenterId;
     const newCcId = editCcId || "";
     
-    if (oldEiId && oldCcId) {
-      expenseUpdates.push({ ccId: oldCcId, eiId: oldEiId, month: oldMonth, delta: -editingBill.amount });
-    }
-    if (newEiId && newCcId) {
-      expenseUpdates.push({ ccId: newCcId, eiId: newEiId, month: newMonth, delta: newAmt });
-    }
-
-    await handleUpdateBill(editingBill.id, {
+    const updatedBill: PayableBill = {
+      ...editingBill,
       description: editDesc.trim(),
       amount: newAmt,
       dueDate: editDate,
       type: editType,
-      expenseItemId: newEiId || undefined,
-      costCenterId: newCcId || undefined,
+      expenseItemId: newEiId || "",
+      costCenterId: newCcId || "",
       status: editStatus,
       competenceMonth: newMonth,
       competenceYear: data.config.year,
-    }, expenseUpdates);
-    setEditingBill(null);
+    };
+
+    const oldExpenseUpdate = createExpenseAllocationUpdate(editingBill, -editingBill.amount, data.config.year);
+    const newExpenseUpdate = createExpenseAllocationUpdate(updatedBill, newAmt, data.config.year);
+    if (oldExpenseUpdate) expenseUpdates.push(oldExpenseUpdate);
+    if (newExpenseUpdate) expenseUpdates.push(newExpenseUpdate);
+
+    setIsSavingEdit(true);
+    try {
+      await handleUpdateBill(editingBill.id, {
+        description: editDesc.trim(),
+        amount: newAmt,
+        dueDate: editDate,
+        type: editType,
+        expenseItemId: newEiId || undefined,
+        costCenterId: newCcId || undefined,
+        status: editStatus,
+        competenceMonth: newMonth,
+        competenceYear: data.config.year,
+      }, expenseUpdates);
+      setEditingBill(null);
+    } catch (error) {
+      setEditFormError(error instanceof Error ? error.message : "Erro ao atualizar conta.");
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const getTypeIcon = (t: string) => {
@@ -339,6 +402,10 @@ export const Payables = () => {
           </button>
         </div>
 
+        {pageError && (
+          <p className="text-xs text-accent-red font-medium mb-3">{pageError}</p>
+        )}
+
         {curMonthBills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="w-12 h-12 rounded-full bg-surface-tertiary flex items-center justify-center mb-3 text-text-tertiary">
@@ -400,6 +467,7 @@ export const Payables = () => {
                     <div
                       className="cursor-pointer hover:opacity-80 transition-all text-right"
                       onClick={() => {
+                        setEditFormError("");
                         setEditingBill(bill);
                         setEditDesc(bill.description);
                         setEditAmount(bill.amount.toString());
@@ -433,7 +501,12 @@ export const Payables = () => {
       {/* Modal Nova Conta */}
       <Modal
         open={showModal}
-        onOpenChange={(v) => { if (!v) { setShowModal(false); resetForm(); } }}
+        onOpenChange={(v) => {
+          if (!v && !isSubmittingNewBill) {
+            setShowModal(false);
+            resetForm();
+          }
+        }}
         title="Nova Conta a Pagar"
         size="md"
       >
@@ -486,7 +559,13 @@ export const Payables = () => {
                   onValueChange={setCompetenceMonth}
                   options={monthOptions}
                   placeholder="Selecione..."
+                  disabled={type !== "UNIQUE"}
                 />
+                {type !== "UNIQUE" && (
+                  <p className="text-[9px] mt-1 text-text-tertiary">
+                    Para contas {type === "RECURRENT" ? "recorrentes" : "parceladas"}, a competência acompanha cada vencimento.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -592,16 +671,18 @@ export const Payables = () => {
 
         <div className="flex gap-2 mt-6">
           <button
-            onClick={() => { setShowModal(false); resetForm(); }}
+            onClick={() => { if (!isSubmittingNewBill) { setShowModal(false); resetForm(); } }}
+            disabled={isSubmittingNewBill}
             className="px-4 py-2.5 rounded-lg text-xs font-semibold border border-border-secondary text-text-secondary hover:bg-surface-tertiary transition-colors cursor-pointer bg-transparent"
           >
             Cancelar
           </button>
           <button
             onClick={handleSaveBill}
-            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
+            disabled={isSubmittingNewBill}
+            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            + Confirmar Lançamento
+            {isSubmittingNewBill ? "Salvando..." : "+ Confirmar Lançamento"}
           </button>
         </div>
       </Modal>
@@ -609,7 +690,7 @@ export const Payables = () => {
       {/* Modal Editar Conta */}
       <Modal
         open={!!editingBill}
-        onOpenChange={(v) => { if (!v) setEditingBill(null); }}
+        onOpenChange={(v) => { if (!v && !isSavingEdit) setEditingBill(null); }}
         title="Editar Conta"
         size="md"
       >
@@ -679,6 +760,7 @@ export const Payables = () => {
               onValueChange={setEditCompMo}
               options={monthOptions}
               placeholder="Selecione..."
+              disabled={editType !== "UNIQUE"}
             />
           </div>
 
@@ -735,18 +817,24 @@ export const Payables = () => {
           </div>
         </div>
 
+        {editFormError && (
+          <p className="text-xs text-accent-red font-medium mt-2">{editFormError}</p>
+        )}
+
         <div className="flex gap-2 mt-6">
           <button
-            onClick={() => setEditingBill(null)}
+            onClick={() => { if (!isSavingEdit) setEditingBill(null); }}
+            disabled={isSavingEdit}
             className="px-4 py-2.5 rounded-lg text-xs font-semibold border border-border-secondary text-text-secondary hover:bg-surface-tertiary transition-colors cursor-pointer bg-transparent"
           >
             Cancelar
           </button>
           <button
             onClick={saveEdit}
-            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer"
+            disabled={isSavingEdit}
+            className="flex-1 py-2.5 rounded-lg bg-primary-btn-bg text-primary-btn-text text-xs font-semibold hover:opacity-90 transition-opacity border-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Salvar Alterações
+            {isSavingEdit ? "Salvando..." : "Salvar Alterações"}
           </button>
         </div>
       </Modal>

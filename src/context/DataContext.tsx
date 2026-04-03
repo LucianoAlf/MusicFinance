@@ -1,8 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { DashboardData, Instrument, Payment, PaymentStatus, PayableBill, ViewKpis } from "../types";
+import {
+  DashboardData,
+  ExpenseAllocationUpdate,
+  Instrument,
+  Payment,
+  PaymentStatus,
+  PayableBill,
+  ProfessorCompensationType,
+  ViewKpis,
+} from "../types";
 import { useAuth } from "./AuthContext";
 import { formatAppError } from "../lib/supabase";
-import { MS } from "../lib/utils";
+import { getDashboardMonthMetrics } from "../lib/dashboardMetrics";
 import {
   loadSchoolData,
   loadKpisRPC,
@@ -12,6 +21,7 @@ import {
   addProfessor as apiAddProfessor,
   updateProfessor as apiUpdateProfessor,
   deleteProfessor as apiDeleteProfessor,
+  upsertProfessorPayrollOverride as apiUpsertProfessorPayrollOverride,
   addStudent as apiAddStudent,
   updateStudent as apiUpdateStudent,
   deleteStudent as apiDeleteStudent,
@@ -61,9 +71,26 @@ interface DataContextType {
   setSelPay: React.Dispatch<React.SetStateAction<string | null>>;
   calcMo: (m: number) => any;
   saveStatus: SaveStatus;
-  handleAddProfessor: (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[] }) => Promise<string>;
-  handleUpdateProfessor: (profId: string, updates: { name?: string; costPerStudent?: number; avatarUrl?: string | null }) => Promise<void>;
+  handleAddProfessor: (d: {
+    name: string;
+    instrument: string;
+    compensationType: ProfessorCompensationType;
+    costPerStudent?: number;
+    hourlyRate?: number;
+    lessonDurationMinutes?: number;
+    instrumentIds?: string[];
+    avatarUrl?: string;
+  }) => Promise<string>;
+  handleUpdateProfessor: (profId: string, updates: {
+    name?: string;
+    compensationType?: ProfessorCompensationType;
+    costPerStudent?: number;
+    hourlyRate?: number;
+    lessonDurationMinutes?: number;
+    avatarUrl?: string | null;
+  }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
+  handleSetProfessorPayrollOverride: (profId: string, month: number, overrideAmount: number | null) => Promise<void>;
   handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => Promise<string>;
   handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument>;
@@ -84,9 +111,9 @@ interface DataContextType {
   handleUpdateRevenueCategory: (categoryId: string, name: string) => Promise<void>;
   handleDeleteRevenueCategory: (categoryId: string) => Promise<void>;
   handleUpdateRevenue: (categoryId: string, month: number, amount: number) => Promise<void>;
-  handleSaveBills: (bills: PayableBill[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => Promise<void>;
-  handleUpdateBill: (billId: string, updates: Partial<PayableBill>, expenseUpdates?: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => Promise<void>;
-  handleDeleteBills: (billIds: string[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => Promise<void>;
+  handleSaveBills: (bills: PayableBill[], expenseUpdates: ExpenseAllocationUpdate[]) => Promise<void>;
+  handleUpdateBill: (billId: string, updates: Partial<PayableBill>, expenseUpdates?: ExpenseAllocationUpdate[]) => Promise<void>;
+  handleDeleteBills: (billIds: string[], expenseUpdates: ExpenseAllocationUpdate[]) => Promise<void>;
   handleToggleBillStatus: (billId: string) => Promise<void>;
   handleUpdateConfig: (key: string, value: string | number) => Promise<void>;
   handleResetData: () => Promise<void>;
@@ -258,38 +285,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const calcMo = (m: number) => {
     if (!data) return null;
-    let tui = 0, pp = 0, expectedTui = 0;
-    const paidPersonIds = new Set<string>();
-    const activePersonIds = new Set<string>();
-    (data.professors || []).forEach((p) => {
-      let activeForProf = 0;
-      (p.students || []).forEach((s) => {
-        if (s.situation === "Ativo") {
-          activePersonIds.add(s.personId || s.id);
-          expectedTui += s.tuitionAmount || 0;
-          activeForProf++;
-        }
-        const pm = s.payments && s.payments[m];
-        if (pm && pm.status === "PAID" && pm.amount > 0) { tui += pm.amount; paidPersonIds.add(s.personId || s.id); }
-      });
-      pp += activeForProf * p.costPerStudent;
-    });
-    const ps = paidPersonIds.size;
-    const activeCount = activePersonIds.size;
-    const rv = data.revenue || [];
-    const extraRev = rv.reduce((sum, rc) => sum + (rc.amounts?.[m] || 0), 0);
-    const rev = tui + extraRev;
-    const expectedRevenue = expectedTui + extraRev;
-    let exp = pp, fc = pp, vc = 0;
-    (data.expenses || []).forEach((cc) =>
-      (cc.items || []).forEach((it) => { const a = it.amounts?.[m] || 0; exp += a; if (it.type === "F") fc += a; else vc += a; })
-    );
-    return { month: MS[m], revenue: rev, expectedRevenue, expenses: exp, profit: rev - exp, margin: rev > 0 ? (rev - exp) / rev : 0, tuition: tui, payingStudents: ps, activeStudents: activeCount, profPayroll: pp, ticket: ps > 0 ? tui / ps : 0, fixedCost: fc, varCost: vc, costPerStudent: activeCount > 0 ? exp / activeCount : 0 };
+    return getDashboardMonthMetrics(data, m);
   };
 
   // ─── Write handlers ────────────────────────────────────────────────────
 
-  const handleAddProfessor = async (d: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[]; avatarUrl?: string }) => {
+  const handleAddProfessor = async (d: {
+    name: string;
+    instrument: string;
+    compensationType: ProfessorCompensationType;
+    costPerStudent?: number;
+    hourlyRate?: number;
+    lessonDurationMinutes?: number;
+    instrumentIds?: string[];
+    avatarUrl?: string;
+  }) => {
     if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     const { data: row, error } = await apiAddProfessor(schoolId, d);
@@ -299,30 +309,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       markError();
       throw new Error(message);
     }
-    const profInsts = (d.instrumentIds || []).map(iid => {
-      const inst = instruments.find(i => i.id === iid);
-      return { id: iid, name: inst?.name || "" };
-    });
-    setData((prev) => prev ? { ...prev, professors: [...prev.professors, { id: row.id, name: row.name, instrument: row.instrument || "", costPerStudent: Number(row.cost_per_student), avatarUrl: row.avatar_url || undefined, instruments: profInsts, students: [] }] } : prev);
+    await fetchAllData();
     setSelProf(row.id);
     markSaved();
     return row.id as string;
   };
 
-  const handleUpdateProfessor = async (profId: string, updates: { name?: string; costPerStudent?: number; avatarUrl?: string | null }) => {
+  const handleUpdateProfessor = async (profId: string, updates: {
+    name?: string;
+    compensationType?: ProfessorCompensationType;
+    costPerStudent?: number;
+    hourlyRate?: number;
+    lessonDurationMinutes?: number;
+    avatarUrl?: string | null;
+  }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateProfessor(profId, updates);
     if (error || !row) { markError(); return; }
-    setData((prev) => prev ? {
-      ...prev,
-      professors: prev.professors.map((p) => p.id === profId ? {
-        ...p,
-        name: row.name ?? p.name,
-        costPerStudent: Number(row.cost_per_student) ?? p.costPerStudent,
-        avatarUrl: row.avatar_url !== undefined ? (row.avatar_url || undefined) : p.avatarUrl,
-      } : p),
-    } : prev);
+    await fetchAllData();
     markSaved();
   };
 
@@ -331,8 +336,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaving();
     const { error } = await apiDeleteProfessor(profId);
     if (error) { markError(); return; }
-    setData((prev) => prev ? { ...prev, professors: prev.professors.filter((p) => p.id !== profId) } : prev);
+    await fetchAllData();
     setSelProf(null);
+    markSaved();
+  };
+
+  const handleSetProfessorPayrollOverride = async (profId: string, month: number, overrideAmount: number | null) => {
+    if (!data) return;
+    markSaving();
+    const { error } = await apiUpsertProfessorPayrollOverride({
+      professorId: profId,
+      year: data.config.year,
+      month: month + 1,
+      overrideAmount,
+    });
+    if (error) {
+      markError();
+      throw new Error(formatAppError(error, "Erro ao atualizar a folha do professor."));
+    }
+    await fetchAllData();
     markSaved();
   };
 
@@ -614,18 +636,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleSaveBills = async (bills: PayableBill[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => {
-    if (!data || !schoolId) return;
+  const handleSaveBills = async (bills: PayableBill[], expenseUpdates: ExpenseAllocationUpdate[]) => {
+    if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
+    if (bills.length === 0) {
+      markError();
+      throw new Error("Nenhuma conta foi gerada para salvar.");
+    }
     const apiRows = bills.map((b) => ({ description: b.description, expenseItemId: b.expenseItemId, billType: b.type, amount: b.amount, dueDate: b.dueDate, totalInstallments: b.totalInstallments, currentInstallment: b.currentInstallment, status: b.status, groupId: b.groupId, paidAmount: b.paidAmount, paidAt: b.paidAt, competenceMonth: b.competenceMonth, competenceYear: b.competenceYear }));
     const { data: created, error } = await apiCreateBills(schoolId, apiRows);
-    if (error || !created) { markError(); return; }
+    if (error || !created) {
+      markError();
+      throw new Error(formatAppError(error, "Erro ao salvar contas."));
+    }
 
-    for (const eu of expenseUpdates) {
-      const cc = data.expenses.find((c) => c.id === eu.ccId);
-      const ei = cc?.items.find((i) => i.id === eu.eiId);
-      const current = ei?.amounts?.[eu.month] || 0;
-      await apiUpsertExpense({ expenseItemId: eu.eiId, schoolId, year: data.config.year, month: eu.month + 1, amount: current + eu.delta });
+    try {
+      for (const eu of expenseUpdates) {
+        const cc = data.expenses.find((c) => c.id === eu.ccId);
+        const ei = cc?.items.find((i) => i.id === eu.eiId);
+        const current = eu.year === data.config.year ? (ei?.amounts?.[eu.month] || 0) : 0;
+        const { error: expenseError } = await apiUpsertExpense({
+          expenseItemId: eu.eiId,
+          schoolId,
+          year: eu.year,
+          month: eu.month + 1,
+          amount: current + eu.delta,
+        });
+        if (expenseError) throw expenseError;
+      }
+    } catch (expenseError) {
+      await fetchAllData();
+      markError();
+      throw new Error(formatAppError(expenseError, "Erro ao atualizar despesas das contas."));
     }
 
     setData((prev) => {
@@ -637,7 +679,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (expenseUpdates.length > 0) {
         newExpenses = prev.expenses.map((cc) => ({
           ...cc, items: cc.items.map((it) => {
-            const updates = expenseUpdates.filter((eu) => eu.eiId === it.id);
+            const updates = expenseUpdates.filter((eu) => eu.eiId === it.id && eu.year === prev.config.year);
             if (updates.length === 0) return it;
             const newAmounts = [...it.amounts];
             updates.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
@@ -667,8 +709,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleUpdateBill = async (billId: string, updates: Partial<PayableBill>, expenseUpdates?: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => {
-    if (!data || !schoolId) return;
+  const handleUpdateBill = async (billId: string, updates: Partial<PayableBill>, expenseUpdates?: ExpenseAllocationUpdate[]) => {
+    if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     const apiUpdates: any = {};
     if (updates.amount !== undefined) apiUpdates.amount = updates.amount;
@@ -680,14 +722,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.competenceMonth !== undefined) apiUpdates.competenceMonth = updates.competenceMonth;
     if (updates.competenceYear !== undefined) apiUpdates.competenceYear = updates.competenceYear;
     const { error } = await apiUpdateBill(billId, apiUpdates);
-    if (error) { markError(); return; }
+    if (error) {
+      markError();
+      throw new Error(formatAppError(error, "Erro ao atualizar conta."));
+    }
 
     if (expenseUpdates) {
-      for (const eu of expenseUpdates) {
-        const cc = data.expenses.find((c) => c.id === eu.ccId);
-        const ei = cc?.items.find((i) => i.id === eu.eiId);
-        const current = ei?.amounts?.[eu.month] || 0;
-        await apiUpsertExpense({ expenseItemId: eu.eiId, schoolId, year: data.config.year, month: eu.month + 1, amount: Math.max(0, current + eu.delta) });
+      try {
+        for (const eu of expenseUpdates) {
+          const cc = data.expenses.find((c) => c.id === eu.ccId);
+          const ei = cc?.items.find((i) => i.id === eu.eiId);
+          const current = eu.year === data.config.year ? (ei?.amounts?.[eu.month] || 0) : 0;
+          const { error: expenseError } = await apiUpsertExpense({
+            expenseItemId: eu.eiId,
+            schoolId,
+            year: eu.year,
+            month: eu.month + 1,
+            amount: Math.max(0, current + eu.delta),
+          });
+          if (expenseError) throw expenseError;
+        }
+      } catch (expenseError) {
+        await fetchAllData();
+        markError();
+        throw new Error(formatAppError(expenseError, "Erro ao atualizar despesas da conta."));
       }
     }
 
@@ -697,7 +755,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (expenseUpdates && expenseUpdates.length > 0) {
         newExpenses = prev.expenses.map((cc) => ({
           ...cc, items: cc.items.map((it) => {
-            const eus = expenseUpdates.filter((eu) => eu.eiId === it.id);
+            const eus = expenseUpdates.filter((eu) => eu.eiId === it.id && eu.year === prev.config.year);
             if (eus.length === 0) return it;
             const newAmounts = [...it.amounts];
             eus.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
@@ -710,17 +768,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleDeleteBills = async (billIds: string[], expenseUpdates: Array<{ ccId: string; eiId: string; month: number; delta: number }>) => {
-    if (!data || !schoolId) return;
+  const handleDeleteBills = async (billIds: string[], expenseUpdates: ExpenseAllocationUpdate[]) => {
+    if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     const { error } = await apiDeleteBills(billIds);
-    if (error) { markError(); return; }
+    if (error) {
+      markError();
+      throw new Error(formatAppError(error, "Erro ao excluir contas."));
+    }
 
-    for (const eu of expenseUpdates) {
-      const cc = data.expenses.find((c) => c.id === eu.ccId);
-      const ei = cc?.items.find((i) => i.id === eu.eiId);
-      const current = ei?.amounts?.[eu.month] || 0;
-      await apiUpsertExpense({ expenseItemId: eu.eiId, schoolId, year: data.config.year, month: eu.month + 1, amount: Math.max(0, current + eu.delta) });
+    try {
+      for (const eu of expenseUpdates) {
+        const cc = data.expenses.find((c) => c.id === eu.ccId);
+        const ei = cc?.items.find((i) => i.id === eu.eiId);
+        const current = eu.year === data.config.year ? (ei?.amounts?.[eu.month] || 0) : 0;
+        const { error: expenseError } = await apiUpsertExpense({
+          expenseItemId: eu.eiId,
+          schoolId,
+          year: eu.year,
+          month: eu.month + 1,
+          amount: Math.max(0, current + eu.delta),
+        });
+        if (expenseError) throw expenseError;
+      }
+    } catch (expenseError) {
+      await fetchAllData();
+      markError();
+      throw new Error(formatAppError(expenseError, "Erro ao atualizar despesas após excluir conta."));
     }
 
     setData((prev) => {
@@ -729,7 +803,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (expenseUpdates.length > 0) {
         newExpenses = prev.expenses.map((cc) => ({
           ...cc, items: cc.items.map((it) => {
-            const eus = expenseUpdates.filter((eu) => eu.eiId === it.id);
+            const eus = expenseUpdates.filter((eu) => eu.eiId === it.id && eu.year === prev.config.year);
             if (eus.length === 0) return it;
             const newAmounts = [...it.amounts];
             eus.forEach((eu) => { newAmounts[eu.month] = Math.max(0, newAmounts[eu.month] + eu.delta); });
@@ -821,7 +895,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data, setData, instruments, dark, setDark, page, setPage, sideCol, setSideCol,
         curMo, setCurMo, selProf, setSelProf, selPay, setSelPay,
         calcMo, saveStatus,
-        handleAddProfessor, handleUpdateProfessor, handleDeleteProfessor,
+        handleAddProfessor, handleUpdateProfessor, handleDeleteProfessor, handleSetProfessorPayrollOverride,
         handleAddStudent, handleUpdateStudent, handleDeleteStudent,
         handleConfirmPayment, handleWaivePayment, handleRevertPayment,
         handleAddInstrument, handleAddProfessorInstrument, handleRemoveProfessorInstrument,

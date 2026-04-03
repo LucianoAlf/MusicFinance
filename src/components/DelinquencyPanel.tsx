@@ -1,14 +1,8 @@
 import React, { useMemo, useState } from "react";
-import type { Professor, Student } from "../types";
-import { brl, MS, MF, cn } from "../lib/utils";
+import type { Professor } from "../types";
+import { brl, MS, cn } from "../lib/utils";
+import { getDelinquencySummary, type DelinquentStudentSummary } from "../lib/delinquency";
 import { AlertTriangle, Copy, Check, Phone, ChevronDown, ChevronRight } from "lucide-react";
-
-interface DelinquentStudent {
-  student: Student;
-  professorName: string;
-  lateMonths: number[];
-  totalOwed: number;
-}
 
 interface Props {
   professors: Professor[];
@@ -20,61 +14,15 @@ export const DelinquencyPanel: React.FC<Props> = ({ professors, currentMonth, ye
   const [copied, setCopied] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const delinquents = useMemo(() => {
-    const result: DelinquentStudent[] = [];
-    const seen = new Set<string>();
+  const delinquencySummary = useMemo(() => {
+    return getDelinquencySummary({ professors, currentMonth, year });
+  }, [professors, currentMonth, year]);
+  const delinquents = delinquencySummary.students;
 
-    const now = new Date();
-    const currentActualMonth = now.getMonth();
-    const currentActualDay = now.getDate();
-    const currentActualYear = now.getFullYear();
+  const totalDelinquent = delinquencySummary.totalDelinquent;
+  const totalOwed = delinquencySummary.totalOwed;
 
-    professors.forEach((p) => {
-      p.students.forEach((s) => {
-        if (s.situation !== "Ativo") return;
-        const key = s.personId || s.id;
-        if (seen.has(key)) return;
-        seen.add(key);
-
-        const lateMonths: number[] = [];
-        let totalOwed = 0;
-        const due = s.dueDay ?? 5;
-
-        for (let m = 0; m <= currentMonth; m++) {
-          const pm = s.payments[m];
-          if (!pm || pm.status === "PENDING") {
-            let isLate = false;
-            if (year < currentActualYear) {
-              isLate = true;
-            } else if (year === currentActualYear) {
-              if (m < currentActualMonth) {
-                isLate = true;
-              } else if (m === currentActualMonth) {
-                if (currentActualDay > due) {
-                  isLate = true;
-                }
-              }
-            }
-
-            if (isLate) {
-              lateMonths.push(m);
-              totalOwed += s.tuitionAmount || 0;
-            }
-          }
-        }
-        if (lateMonths.length > 0) {
-          result.push({ student: s, professorName: p.name, lateMonths, totalOwed });
-        }
-      });
-    });
-
-    return result.sort((a, b) => b.lateMonths.length - a.lateMonths.length);
-  }, [professors, currentMonth]);
-
-  const totalDelinquent = delinquents.length;
-  const totalOwed = delinquents.reduce((s, d) => s + d.totalOwed, 0);
-
-  const copyContact = async (d: DelinquentStudent) => {
+  const copyContact = async (d: DelinquentStudentSummary) => {
     const lines: string[] = [];
     lines.push(`Aluno: ${d.student.name}`);
     lines.push(`Professor: ${d.professorName}`);
@@ -95,7 +43,7 @@ export const DelinquencyPanel: React.FC<Props> = ({ professors, currentMonth, ye
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary bg-surface-tertiary">
         <div className="flex items-center gap-2">
           <AlertTriangle size={14} className="text-accent-red" />
-          <span className="text-xs font-semibold text-text-primary uppercase tracking-wider">Inadimplência</span>
+          <span className="text-xs font-semibold text-text-primary uppercase tracking-wider">Inadimplência Acumulada</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-[11px] font-mono text-accent-red font-medium">{totalDelinquent} alunos</span>

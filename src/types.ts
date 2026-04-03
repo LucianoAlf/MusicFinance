@@ -11,6 +11,21 @@ export interface Instrument {
   name: string;
 }
 
+export type ProfessorCompensationType = "per_student" | "hourly";
+export type ProfessorPayrollSource = "auto" | "override";
+
+export interface ProfessorMonthlyPayroll {
+  year: number;
+  month: number;
+  amount: number;
+  autoAmount: number;
+  overrideAmount: number | null;
+  lessonCount: number;
+  activeStudents: number;
+  payrollSource: ProfessorPayrollSource;
+  notes?: string;
+}
+
 export interface Student {
   id: string;
   personId: string;
@@ -35,10 +50,14 @@ export interface Professor {
   id: string;
   name: string;
   instrument: string;
+  compensationType: ProfessorCompensationType;
   costPerStudent: number;
+  hourlyRate: number;
+  lessonDurationMinutes: number;
   avatarUrl?: string;
   instruments: Instrument[];
   students: Student[];
+  monthlyPayroll: ProfessorMonthlyPayroll[];
 }
 
 export interface ExpenseItem {
@@ -86,6 +105,14 @@ export interface PayableBill {
   groupId?: string;
   competenceMonth?: number;
   competenceYear?: number;
+}
+
+export interface ExpenseAllocationUpdate {
+  ccId: string;
+  eiId: string;
+  month: number;
+  year: number;
+  delta: number;
 }
 
 export interface DashboardData {

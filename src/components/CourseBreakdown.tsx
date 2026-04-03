@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { getProfessorStudentCostAllocation } from "../lib/professorCompensation";
 import type { Professor } from "../types";
 import { brl, pct, MS, cn } from "../lib/utils";
 import { BarChart3, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
@@ -17,9 +18,10 @@ interface CourseData {
 interface Props {
   professors: Professor[];
   currentMonth: number;
+  year: number;
 }
 
-export const CourseBreakdown: React.FC<Props> = ({ professors, currentMonth }) => {
+export const CourseBreakdown: React.FC<Props> = ({ professors, currentMonth, year }) => {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"revenue" | "profit" | "margin" | "students">("revenue");
 
@@ -27,6 +29,7 @@ export const CourseBreakdown: React.FC<Props> = ({ professors, currentMonth }) =
     const map = new Map<string, { students: Set<string>; paying: Set<string>; revenue: number; cost: number }>();
 
     professors.forEach((p) => {
+      const costAllocation = getProfessorStudentCostAllocation(p, year, currentMonth);
       p.students.forEach((s) => {
         if (s.situation !== "Ativo") return;
         const inst = s.instrumentName || "Sem curso";
@@ -40,7 +43,7 @@ export const CourseBreakdown: React.FC<Props> = ({ professors, currentMonth }) =
         if (pm && pm.status === "PAID" && pm.amount > 0) {
           entry.paying.add(key);
           entry.revenue += pm.amount;
-          entry.cost += p.costPerStudent;
+          entry.cost += costAllocation.get(s.id) || 0;
         }
       });
     });
@@ -65,7 +68,7 @@ export const CourseBreakdown: React.FC<Props> = ({ professors, currentMonth }) =
     });
 
     return result.sort((a, b) => b[sortBy] - a[sortBy]);
-  }, [professors, currentMonth, sortBy]);
+  }, [professors, currentMonth, sortBy, year]);
 
   const totalRevenue = courses.reduce((s, c) => s + c.revenue, 0);
   const totalCost = courses.reduce((s, c) => s + c.cost, 0);

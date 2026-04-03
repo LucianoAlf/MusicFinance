@@ -202,7 +202,7 @@ export const Dre = () => {
               {renderRow("MARGEM DE CONTRIBUIÇÃO", m => m.contributionMargin, { isSubtotal: true })}
 
               {renderRow("DESPESAS FIXAS", m => m.totalFixed, { isSubtotal: true, isNegative: true })}
-              {renderRow("Folha Professores (auto)", m => m.folhaProf, { indent: 1 })}
+              {renderRow("Folha Professores", m => m.folhaProf, { indent: 1 })}
               {data.expenses
                 .filter(cc => cc.name !== "Impostos")
                 .map((cc, ci) => (

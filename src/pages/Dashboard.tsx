@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useData } from "../context/DataContext";
 import { MonthSelector } from "../components/MonthSelector";
 import { KpiCard } from "../components/KpiCard";
 import { DelinquencyPanel } from "../components/DelinquencyPanel";
 import { CourseBreakdown } from "../components/CourseBreakdown";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
+import { getDelinquencySummary } from "../lib/delinquency";
 import {
   DollarSign,
   Wallet,
@@ -66,59 +67,23 @@ export const Dashboard = () => {
 
   const kpiMes = viewKpis?.monthly?.find((k) => k.month === curMo + 1);
   const kpiPrev = viewKpis?.monthly?.find((k) => k.month === curMo);
-  const beMes = viewKpis?.breakeven?.find((b) => b.month === curMo + 1);
-
   const newEnrollments = kpiMes?.newEnrollments ?? 0;
   const churnedStudents = kpiMes?.churnedStudents ?? 0;
   const churnRate = kpiMes?.churnRate ?? 0;
-  const activeStudents = kpiMes?.activeStudents ?? 0;
+  const activeStudents = cur.activeStudents;
   const avgTenure = viewKpis?.avgTenureMonths ?? 0;
 
-  const delinquentCount = (() => {
-    const seen = new Set<string>();
-    let count = 0;
-    const now = new Date();
-    const currentActualMonth = now.getMonth();
-    const currentActualDay = now.getDate();
-    const currentActualYear = now.getFullYear();
-    const selectedYear = data.config.year;
-
-    data.professors.forEach((p) => {
-      p.students.forEach((s) => {
-        if (s.situation !== "Ativo") return;
-        const key = s.personId || s.id;
-        if (seen.has(key)) return;
-        seen.add(key);
-        
-        const due = s.dueDay ?? 5;
-        let isDelinquent = false;
-
-        for (let m = 0; m <= curMo; m++) {
-          const pm = s.payments[m];
-          if (!pm || pm.status === "PENDING") {
-            if (selectedYear < currentActualYear) {
-              isDelinquent = true; break;
-            } else if (selectedYear === currentActualYear) {
-              if (m < currentActualMonth) {
-                isDelinquent = true; break;
-              } else if (m === currentActualMonth) {
-                if (currentActualDay > due) {
-                  isDelinquent = true; break;
-                }
-              }
-            }
-          }
-        }
-        if (isDelinquent) count++;
-      });
-    });
-    return count;
-  })();
+  const delinquencySummary = useMemo(() => getDelinquencySummary({
+    professors: data.professors,
+    currentMonth: curMo,
+    year: data.config.year,
+  }), [data.professors, curMo, data.config.year]);
+  const delinquentCount = delinquencySummary.totalDelinquent;
   
   // Cálculo do Ponto de Equilíbrio em Alunos
-  // PE (Alunos) = Despesas Fixas / (Ticket Médio - Custo Var por Aluno)
-  const marginPerStudent = cur.ticket - cur.costPerStudent;
-  const beAlunos = marginPerStudent > 0 ? Math.ceil(cur.fixedCost / marginPerStudent) : null;
+  // Regra acordada: despesas totais do mês / ticket médio do mês.
+  const breakEvenStudents = cur.ticket > 0 ? cur.expenses / cur.ticket : null;
+  const breakEvenStudentsRounded = breakEvenStudents != null ? Math.ceil(breakEvenStudents) : null;
 
   const ccT = (data.expenses || []).map((cc) => {
     let t = 0;
@@ -154,8 +119,12 @@ export const Dashboard = () => {
           <KpiCard label="Previsto" value={brl(cur.expectedRevenue)} sub={cur.expectedRevenue > 0 ? `Realizado: ${pct(cur.revenue / cur.expectedRevenue)}` : undefined} />
           <KpiCard label="Despesas" value={brl(cur.expenses)} trend={trend(cur.expenses, prev?.expenses)} invertTrend />
           <KpiCard label="Resultado" value={brl(cur.profit)} trend={trend(cur.profit, prev?.profit)} />
-          <KpiCard label="Ticket Médio" value={brl(cur.ticket)} sub={`Custo ${brl(cur.costPerStudent)}`} />
-          <KpiCard label="Ponto de Equilíbrio" value={beAlunos != null ? `${beAlunos} alunos` : "—"} sub={beAlunos != null ? `Margem/al: ${brl(marginPerStudent)}` : undefined} />
+          <KpiCard label="Ticket Médio" value={brl(cur.ticket)} />
+          <KpiCard
+            label="Ponto de Equilíbrio"
+            value={breakEvenStudentsRounded != null ? `${breakEvenStudentsRounded} alunos` : "—"}
+            sub={breakEvenStudents != null ? `Custo/aluno ${brl(cur.costPerStudent)}` : undefined}
+          />
         </div>
       </div>
 
@@ -169,7 +138,13 @@ export const Dashboard = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <KpiCard label="Ativos" value={activeStudents} />
           <KpiCard label="Pagantes" value={cur.payingStudents} sub={`${data.professors.length} profs`} />
-          <KpiCard label="Inadimplentes" value={delinquentCount} sub={delinquentCount > 0 && activeStudents > 0 ? `${((delinquentCount / activeStudents) * 100).toFixed(0)}% da base` : undefined} />
+          <KpiCard
+            label="Em atraso acumulado"
+            value={delinquentCount}
+            sub={activeStudents > 0
+              ? `No mês: ${delinquencySummary.currentMonthDelinquent} · ${((delinquentCount / activeStudents) * 100).toFixed(0)}% da base`
+              : undefined}
+          />
           <KpiCard label="Matrículas" value={newEnrollments} trend={trend(newEnrollments, kpiPrev?.newEnrollments ?? null)} />
           <KpiCard label="Evasões" value={churnedStudents} trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
           <KpiCard label="Churn Rate" value={churnRate.toFixed(1) + "%"} trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
@@ -181,10 +156,10 @@ export const Dashboard = () => {
       {delinquentCount > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <DelinquencyPanel professors={data.professors} currentMonth={curMo} year={data.config.year} />
-          <CourseBreakdown professors={data.professors} currentMonth={curMo} />
+          <CourseBreakdown professors={data.professors} currentMonth={curMo} year={data.config.year} />
         </div>
       ) : (
-        <CourseBreakdown professors={data.professors} currentMonth={curMo} />
+        <CourseBreakdown professors={data.professors} currentMonth={curMo} year={data.config.year} />
       )}
 
       {/* Gráficos - só renderiza após DOM estar pronto */}

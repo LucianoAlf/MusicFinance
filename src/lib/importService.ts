@@ -539,7 +539,7 @@ export function computeDiff(
         type: "CREATE_PROFESSOR",
         label: `Novo professor: ${sp.name} (${sp.instruments.join(", ") || "sem instrumento"}) — Custo: R$ 0 (configure depois)`,
         enabled: true,
-        data: { ...sp, costPerStudent: 0 },
+        data: { ...sp, costPerStudent: 0, compensationType: "per_student", hourlyRate: 0, lessonDurationMinutes: 60 },
       });
     } else {
       for (const instName of sp.instruments) {
@@ -771,6 +771,9 @@ export async function executeActions(
         name: a.data.name,
         instrument: a.data.instruments?.[0] || "",
         cost_per_student: a.data.costPerStudent ?? 0,
+        compensation_type: a.data.compensationType ?? "per_student",
+        hourly_rate: a.data.hourlyRate ?? 0,
+        lesson_duration_minutes: a.data.lessonDurationMinutes ?? 60,
       }));
       const { data: newProfs } = await supabase
         .from("professors")
@@ -808,7 +811,12 @@ export async function executeActions(
 
     // Phase 2: Update professors
     for (const action of enabled.filter((a) => a.type === "UPDATE_PROFESSOR")) {
-      await supabase.from("professors").update({ cost_per_student: action.data.costPerStudent }).eq("id", action.data.professorId);
+      await supabase.from("professors").update({
+        cost_per_student: action.data.costPerStudent,
+        compensation_type: action.data.compensationType ?? "per_student",
+        hourly_rate: action.data.hourlyRate ?? 0,
+        lesson_duration_minutes: action.data.lessonDurationMinutes ?? 60,
+      }).eq("id", action.data.professorId);
       done++;
       onProgress?.(done, total);
     }

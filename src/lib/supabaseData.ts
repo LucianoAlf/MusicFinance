@@ -2,6 +2,8 @@ import { supabase } from "./supabase";
 import type {
   DashboardData,
   Professor,
+  ProfessorCompensationType,
+  ProfessorMonthlyPayroll,
   Student,
   Payment,
   PaymentStatus,
@@ -14,7 +16,28 @@ import type {
 } from "../types";
 
 // ─── Row types from Supabase ───────────────────────────────────────────────
-interface DbProfessor { id: string; name: string; instrument: string; cost_per_student: number; avatar_url: string | null; }
+interface DbProfessor {
+  id: string;
+  name: string;
+  instrument: string;
+  cost_per_student: number;
+  compensation_type: ProfessorCompensationType;
+  hourly_rate: number;
+  lesson_duration_minutes: number;
+  avatar_url: string | null;
+}
+interface DbProfessorMonthlyPayroll {
+  professor_id: string;
+  year: number;
+  month: number;
+  auto_amount: number;
+  override_amount: number | null;
+  professor_payroll: number;
+  lesson_count: number;
+  active_students: number;
+  payroll_source: "auto" | "override";
+  notes: string | null;
+}
 interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; phone: string | null; responsible_name: string | null; responsible_phone: string | null; due_day: number | null; payment_method: string | null; }
 interface DbInstrument { id: string; school_id: string; name: string; }
 interface DbProfInstrument { professor_id: string; instrument_id: string; instruments: { id: string; name: string } | { id: string; name: string }[] | null; }
@@ -64,6 +87,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
   const payments = (raw.payments || []) as DbPayment[];
   const allInstruments = (raw.instruments || []) as DbInstrument[];
   const profInstruments = (raw.professor_instruments || []) as { professor_id: string; instrument_id: string; instrument_name: string }[];
+  const monthlyProfessorPayroll = (raw.professor_monthly_payroll || []) as DbProfessorMonthlyPayroll[];
   const instrumentMap = new Map(allInstruments.map(i => [i.id, i.name]));
   const costCenters = (raw.cost_centers || []) as DbCostCenter[];
   const expenseItems = (raw.expense_items || []) as DbExpenseItem[];
@@ -90,13 +114,31 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
         id: pi.instrument_id,
         name: pi.instrument_name || instrumentMap.get(pi.instrument_id) || "",
       }));
+    const payrollByMonth: ProfessorMonthlyPayroll[] = monthlyProfessorPayroll
+      .filter((entry) => entry.professor_id === p.id)
+      .map((entry) => ({
+        year: entry.year,
+        month: entry.month,
+        amount: Number(entry.professor_payroll),
+        autoAmount: Number(entry.auto_amount),
+        overrideAmount: entry.override_amount != null ? Number(entry.override_amount) : null,
+        lessonCount: Number(entry.lesson_count),
+        activeStudents: Number(entry.active_students),
+        payrollSource: entry.payroll_source,
+        notes: entry.notes || undefined,
+      }))
+      .sort((a, b) => a.month - b.month);
     return {
       id: p.id,
       name: p.name,
       instrument: p.instrument || "",
+      compensationType: p.compensation_type || "per_student",
       costPerStudent: Number(p.cost_per_student),
+      hourlyRate: Number(p.hourly_rate || 0),
+      lessonDurationMinutes: Number(p.lesson_duration_minutes || 60),
       avatarUrl: p.avatar_url || undefined,
       instruments: profInsts,
+      monthlyPayroll: payrollByMonth,
       students: students
         .filter((s) => s.professor_id === p.id)
         .map((s) => {
@@ -241,10 +283,31 @@ export async function loadAvgTenure(schoolId: string) {
 
 // ─── WRITES: Professors ────────────────────────────────────────────────────
 
-export async function addProfessor(schoolId: string, data: { name: string; instrument: string; costPerStudent: number; instrumentIds?: string[]; avatarUrl?: string }) {
-  const row: any = { school_id: schoolId, name: data.name, instrument: data.instrument, cost_per_student: data.costPerStudent };
+export async function addProfessor(schoolId: string, data: {
+  name: string;
+  instrument: string;
+  compensationType: ProfessorCompensationType;
+  costPerStudent?: number;
+  hourlyRate?: number;
+  lessonDurationMinutes?: number;
+  instrumentIds?: string[];
+  avatarUrl?: string;
+}) {
+  const row: any = {
+    school_id: schoolId,
+    name: data.name,
+    instrument: data.instrument,
+    compensation_type: data.compensationType,
+    cost_per_student: data.costPerStudent ?? 0,
+    hourly_rate: data.hourlyRate ?? 0,
+    lesson_duration_minutes: data.lessonDurationMinutes ?? 60,
+  };
   if (data.avatarUrl) row.avatar_url = data.avatarUrl;
-  const res = await supabase.from("professors").insert(row).select("id, name, instrument, cost_per_student, avatar_url").maybeSingle();
+  const res = await supabase
+    .from("professors")
+    .insert(row)
+    .select("id, name, instrument, cost_per_student, compensation_type, hourly_rate, lesson_duration_minutes, avatar_url")
+    .maybeSingle();
   if (res.error || !res.data) return res;
 
   if (data.instrumentIds && data.instrumentIds.length > 0) {
@@ -257,12 +320,56 @@ export async function addProfessor(schoolId: string, data: { name: string; instr
   return res;
 }
 
-export async function updateProfessor(profId: string, data: { name?: string; costPerStudent?: number; avatarUrl?: string | null }) {
+export async function updateProfessor(profId: string, data: {
+  name?: string;
+  compensationType?: ProfessorCompensationType;
+  costPerStudent?: number;
+  hourlyRate?: number;
+  lessonDurationMinutes?: number;
+  avatarUrl?: string | null;
+}) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
+  if (data.compensationType !== undefined) update.compensation_type = data.compensationType;
   if (data.costPerStudent !== undefined) update.cost_per_student = data.costPerStudent;
+  if (data.hourlyRate !== undefined) update.hourly_rate = data.hourlyRate;
+  if (data.lessonDurationMinutes !== undefined) update.lesson_duration_minutes = data.lessonDurationMinutes;
   if (data.avatarUrl !== undefined) update.avatar_url = data.avatarUrl;
-  return supabase.from("professors").update(update).eq("id", profId).select("id, name, instrument, cost_per_student, avatar_url").maybeSingle();
+  return supabase
+    .from("professors")
+    .update(update)
+    .eq("id", profId)
+    .select("id, name, instrument, cost_per_student, compensation_type, hourly_rate, lesson_duration_minutes, avatar_url")
+    .maybeSingle();
+}
+
+export async function upsertProfessorPayrollOverride(data: {
+  professorId: string;
+  year: number;
+  month: number;
+  overrideAmount: number | null;
+  notes?: string | null;
+}) {
+  if (data.overrideAmount === null) {
+    return supabase
+      .from("professor_monthly_payroll_overrides")
+      .delete()
+      .eq("professor_id", data.professorId)
+      .eq("year", data.year)
+      .eq("month", data.month);
+  }
+
+  return supabase
+    .from("professor_monthly_payroll_overrides")
+    .upsert({
+      professor_id: data.professorId,
+      year: data.year,
+      month: data.month,
+      override_amount: data.overrideAmount,
+      notes: data.notes ?? null,
+    }, {
+      onConflict: "professor_id,year,month",
+    });
 }
 
 export async function deleteProfessor(profId: string) {

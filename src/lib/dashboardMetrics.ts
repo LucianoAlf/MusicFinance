@@ -19,6 +19,18 @@ export interface DashboardMonthMetrics {
   costPerStudent: number;
 }
 
+export interface CashProjection30Days {
+  anchorDate: Date;
+  endDate: Date;
+  expectedIncoming: number;
+  expectedIncomingCount: number;
+  scheduledOutgoing: number;
+  scheduledOutgoingCount: number;
+  overdueOutgoing: number;
+  overdueOutgoingCount: number;
+  projectedNet: number;
+}
+
 export function getDashboardMonthMetrics(data: DashboardData, monthIndex: number): DashboardMonthMetrics {
   let tuitionRevenue = 0;
   let professorPayroll = 0;
@@ -78,5 +90,87 @@ export function getDashboardMonthMetrics(data: DashboardData, monthIndex: number
     fixedCost,
     varCost,
     costPerStudent: activeStudents > 0 ? expenses / activeStudents : 0,
+  };
+}
+
+function clampDayToMonth(year: number, monthIndex: number, day: number) {
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  return Math.min(Math.max(day, 1), lastDay);
+}
+
+function getProjectionAnchorDate(year: number, currentMonth: number, referenceDate = new Date()) {
+  if (referenceDate.getFullYear() === year && referenceDate.getMonth() === currentMonth) {
+    return new Date(year, currentMonth, referenceDate.getDate());
+  }
+  return new Date(year, currentMonth, 1);
+}
+
+function isDateInRange(date: Date, start: Date, end: Date) {
+  return date.getTime() >= start.getTime() && date.getTime() <= end.getTime();
+}
+
+export function getCashProjection30Days(
+  data: DashboardData,
+  currentMonth: number,
+  referenceDate = new Date()
+): CashProjection30Days {
+  const anchorDate = getProjectionAnchorDate(data.config.year, currentMonth, referenceDate);
+  const start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate(), 0, 0, 0, 0);
+  const endDate = new Date(start);
+  endDate.setDate(endDate.getDate() + 30);
+  endDate.setHours(23, 59, 59, 999);
+
+  const monthKeys: Array<{ year: number; monthIndex: number }> = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (cursor <= endDate) {
+    monthKeys.push({ year: cursor.getFullYear(), monthIndex: cursor.getMonth() });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  let expectedIncoming = 0;
+  let expectedIncomingCount = 0;
+
+  data.professors.forEach((professor) => {
+    professor.students.forEach((student) => {
+      if (student.situation !== "Ativo") return;
+      const dueDay = student.dueDay ?? 5;
+
+      monthKeys.forEach(({ year, monthIndex }) => {
+        if (year !== data.config.year) return;
+        const payment = student.payments[monthIndex];
+        if (payment && payment.status !== "PENDING") return;
+
+        const dueDate = new Date(year, monthIndex, clampDayToMonth(year, monthIndex, dueDay));
+        if (!isDateInRange(dueDate, start, endDate)) return;
+
+        expectedIncoming += payment?.amount ?? student.tuitionAmount ?? 0;
+        expectedIncomingCount += 1;
+      });
+    });
+  });
+
+  const pendingBills = data.payableBills.filter((bill) => bill.status === "PENDING");
+  const scheduledBills = pendingBills.filter((bill) => {
+    const dueDate = new Date(bill.dueDate + "T12:00:00");
+    return isDateInRange(dueDate, start, endDate);
+  });
+  const overdueBills = pendingBills.filter((bill) => {
+    const dueDate = new Date(bill.dueDate + "T12:00:00");
+    return dueDate < start;
+  });
+
+  const scheduledOutgoing = scheduledBills.reduce((sum, bill) => sum + bill.amount, 0);
+  const overdueOutgoing = overdueBills.reduce((sum, bill) => sum + bill.amount, 0);
+
+  return {
+    anchorDate: start,
+    endDate,
+    expectedIncoming,
+    expectedIncomingCount,
+    scheduledOutgoing,
+    scheduledOutgoingCount: scheduledBills.length,
+    overdueOutgoing,
+    overdueOutgoingCount: overdueBills.length,
+    projectedNet: expectedIncoming - scheduledOutgoing,
   };
 }

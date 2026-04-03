@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useData } from "../context/DataContext";
 import { MonthSelector } from "../components/MonthSelector";
 import { Select, DatePicker, Modal, ConfirmModal, useConfirm } from "../components/ui";
@@ -19,7 +19,7 @@ import { ExpenseAllocationUpdate, PayableBill } from "../types";
 const COLORS = ["#0ea5e9", "#f97316", "#ec4899", "#84cc16", "#64748b", "#8b5cf6", "#14b8a6", "#f43f5e"];
 
 export const Payables = () => {
-  const { data, curMo, setCurMo, handleSaveBills, handleToggleBillStatus, handleDeleteBills, handleUpdateBill, handleAddCostCenter, handleAddExpenseItem } = useData();
+  const { data, curMo, setCurMo, selBill, setSelBill, handleSaveBills, handleToggleBillStatus, handleDeleteBills, handleUpdateBill, handleAddCostCenter, handleAddExpenseItem } = useData();
   const [showModal, setShowModal] = useState(false);
 
   // Form State
@@ -78,6 +78,32 @@ export const Payables = () => {
     : [];
 
   const monthOptions = MF.map((m, i) => ({ value: String(i), label: m }));
+
+  const openBillEditor = (bill: PayableBill) => {
+    setEditFormError("");
+    setEditingBill(bill);
+    setEditDesc(bill.description);
+    setEditAmount(bill.amount.toString());
+    setEditDate(bill.dueDate);
+    setEditType(bill.type as "UNIQUE" | "RECURRENT" | "INSTALLMENT");
+    setEditCcId(bill.costCenterId || "");
+    setEditEiId(bill.expenseItemId || "");
+    setEditStatus(bill.status as "PENDING" | "PAID");
+    setEditCompMo(bill.competenceMonth !== undefined ? String(bill.competenceMonth) : String(new Date(bill.dueDate + "T12:00:00").getMonth()));
+  };
+
+  useEffect(() => {
+    if (!selBill) return;
+    const bill = data.payableBills.find((item) => item.id === selBill);
+    if (!bill) {
+      setSelBill(null);
+      return;
+    }
+    const month = bill.competenceMonth ?? new Date(bill.dueDate + "T12:00:00").getMonth();
+    if (month !== curMo) setCurMo(month);
+    openBillEditor(bill);
+    setSelBill(null);
+  }, [selBill, data, curMo, setCurMo, setSelBill]);
 
   const handleSaveBill = async () => {
     setFormError("");
@@ -466,18 +492,7 @@ export const Payables = () => {
                   <div className="flex items-center gap-4">
                     <div
                       className="cursor-pointer hover:opacity-80 transition-all text-right"
-                      onClick={() => {
-                        setEditFormError("");
-                        setEditingBill(bill);
-                        setEditDesc(bill.description);
-                        setEditAmount(bill.amount.toString());
-                        setEditDate(bill.dueDate);
-                        setEditType(bill.type as "UNIQUE" | "RECURRENT" | "INSTALLMENT");
-                        setEditCcId(bill.costCenterId || "");
-                        setEditEiId(bill.expenseItemId || "");
-                        setEditStatus(bill.status as "PENDING" | "PAID");
-                        setEditCompMo(bill.competenceMonth !== undefined ? String(bill.competenceMonth) : String(new Date(bill.dueDate + "T12:00:00").getMonth()));
-                      }}
+                      onClick={() => openBillEditor(bill)}
                     >
                       <p className={cn("text-sm font-mono font-bold", isPaid ? "text-accent-green" : "text-text-primary")}>
                         {brl(bill.amount)}

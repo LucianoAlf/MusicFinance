@@ -2,6 +2,7 @@ import type { Professor, Student } from "../types";
 
 export interface DelinquentStudentSummary {
   student: Student;
+  professorId: string;
   professorName: string;
   lateMonths: number[];
   totalOwed: number;
@@ -63,6 +64,7 @@ export function getDelinquencySummary(params: {
 
       students.push({
         student,
+        professorId: professor.id,
         professorName: professor.name,
         lateMonths,
         totalOwed,

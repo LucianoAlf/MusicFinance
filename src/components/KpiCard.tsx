@@ -10,10 +10,11 @@ interface KpiCardProps {
   trend?: number | null;
   invertTrend?: boolean;
   sub?: string;
+  note?: string;
   variant?: "default" | "hero";
 }
 
-export const KpiCard: React.FC<KpiCardProps> = ({ label, value, trend, invertTrend, sub, variant = "default" }) => {
+export const KpiCard: React.FC<KpiCardProps> = ({ label, value, trend, invertTrend, sub, note, variant = "default" }) => {
   const rawUp = trend != null && trend >= 0;
   const up = invertTrend ? !rawUp : rawUp;
   const isHero = variant === "hero";
@@ -53,6 +54,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({ label, value, trend, invertTre
         )}
       </div>
       {sub && <p className={cn("text-xs", isHero ? "text-accent-green/50" : "text-text-tertiary")}>{sub}</p>}
+      {note && <p className={cn("text-[11px] mt-1", isHero ? "text-accent-green/40" : "text-text-tertiary")}>{note}</p>}
     </div>
   );
 };

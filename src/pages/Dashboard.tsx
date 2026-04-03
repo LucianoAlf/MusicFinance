@@ -6,20 +6,15 @@ import { DelinquencyPanel } from "../components/DelinquencyPanel";
 import { CourseBreakdown } from "../components/CourseBreakdown";
 import { brl, pct, MS, MF, cn } from "../lib/utils";
 import { getDelinquencySummary } from "../lib/delinquency";
+import { getCashProjection30Days } from "../lib/dashboardMetrics";
 import {
-  DollarSign,
-  Wallet,
-  PiggyBank,
-  Target,
-  GraduationCap,
-  BarChart,
-  UserPlus,
-  UserMinus,
-  TrendingDown,
-  Clock,
-  Crosshair,
-  Users,
+  AlertTriangle,
   Calendar,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Wallet,
 } from "lucide-react";
 import {
   LineChart,
@@ -39,8 +34,9 @@ import {
 } from "recharts";
 
 export const Dashboard = () => {
-  const { data, calcMo, curMo, setCurMo, viewKpis } = useData();
+  const { data, calcMo, curMo, setCurMo, setPage, setSelProf, setSelPay, setSelBill, viewKpis } = useData();
   const [chartsReady, setChartsReady] = useState(false);
+  const [expandedPriority, setExpandedPriority] = useState<string | null>(null);
 
   // Aguardar o DOM estar pronto antes de renderizar os gráficos
   // Evita erro "insertBefore" do Recharts em containers com dimensão 0
@@ -65,6 +61,18 @@ export const Dashboard = () => {
     return ((curVal - prevVal) / Math.abs(prevVal)) * 100;
   };
 
+  const comparisonNote = (
+    currentValue: number,
+    previousValue: number | null | undefined,
+    formatter: (value: number) => string
+  ) => {
+    if (previousValue == null) return undefined;
+    const delta = currentValue - previousValue;
+    if (delta === 0) return `vs ${MF[curMo - 1] ?? "mês anterior"}: sem variação`;
+    const signal = delta > 0 ? "+" : delta < 0 ? "-" : "";
+    return `vs ${MF[curMo - 1] ?? "mês anterior"}: ${signal}${formatter(Math.abs(delta))}`;
+  };
+
   const kpiMes = viewKpis?.monthly?.find((k) => k.month === curMo + 1);
   const kpiPrev = viewKpis?.monthly?.find((k) => k.month === curMo);
   const newEnrollments = kpiMes?.newEnrollments ?? 0;
@@ -79,11 +87,50 @@ export const Dashboard = () => {
     year: data.config.year,
   }), [data.professors, curMo, data.config.year]);
   const delinquentCount = delinquencySummary.totalDelinquent;
+  const cashProjection = useMemo(() => getCashProjection30Days(data, curMo), [data, curMo]);
   
   // Cálculo do Ponto de Equilíbrio em Alunos
   // Regra acordada: despesas totais do mês / ticket médio do mês.
   const breakEvenStudents = cur.ticket > 0 ? cur.expenses / cur.ticket : null;
   const breakEvenStudentsRounded = breakEvenStudents != null ? Math.ceil(breakEvenStudents) : null;
+  const activeAlertCount = [
+    cashProjection.overdueOutgoingCount > 0,
+    delinquencySummary.totalOwed > 0,
+    breakEvenStudentsRounded != null && cur.payingStudents < breakEvenStudentsRounded,
+  ].filter(Boolean).length;
+  const overdueBills = data.payableBills
+    .filter((bill) => bill.status === "PENDING" && new Date(bill.dueDate + "T12:00:00") < cashProjection.anchorDate)
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+  const priorityAlerts = [
+    cashProjection.overdueOutgoingCount > 0
+      ? {
+          id: "overdue-bills",
+          tone: "warning" as const,
+          title: `${cashProjection.overdueOutgoingCount} conta(s) vencida(s) em aberto`,
+          detail: `Contas a pagar já vencidas somam ${brl(cashProjection.overdueOutgoing)}.`,
+          expandable: true,
+        }
+      : null,
+    delinquencySummary.totalOwed > 0
+      ? {
+          id: "delinquency",
+          tone: "warning" as const,
+          title: `${delinquencySummary.totalDelinquent} aluno(s) com atraso acumulado`,
+          detail: `A inadimplência acumulada está em ${brl(delinquencySummary.totalOwed)}.`,
+          expandable: true,
+        }
+      : null,
+    breakEvenStudentsRounded != null && cur.payingStudents < breakEvenStudentsRounded
+      ? {
+          id: "breakeven-gap",
+          tone: "info" as const,
+          title: "Mês abaixo do ponto de equilíbrio",
+          detail: `Faltam ${breakEvenStudentsRounded - cur.payingStudents} aluno(s) pagantes para atingir o equilíbrio do mês.`,
+          expandable: false,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ id: string; tone: "warning" | "info"; title: string; detail: string; expandable: boolean }>;
 
   const ccT = (data.expenses || []).map((cc) => {
     let t = 0;
@@ -115,16 +162,74 @@ export const Dashboard = () => {
           Financeiro — {MF[curMo]}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <KpiCard label="Receita" value={brl(cur.revenue)} trend={trend(cur.revenue, prev?.revenue)} />
-          <KpiCard label="Previsto" value={brl(cur.expectedRevenue)} sub={cur.expectedRevenue > 0 ? `Realizado: ${pct(cur.revenue / cur.expectedRevenue)}` : undefined} />
-          <KpiCard label="Despesas" value={brl(cur.expenses)} trend={trend(cur.expenses, prev?.expenses)} invertTrend />
-          <KpiCard label="Resultado" value={brl(cur.profit)} trend={trend(cur.profit, prev?.profit)} />
-          <KpiCard label="Ticket Médio" value={brl(cur.ticket)} />
+          <KpiCard
+            label="Receita"
+            value={brl(cur.revenue)}
+            trend={trend(cur.revenue, prev?.revenue)}
+            note={comparisonNote(cur.revenue, prev?.revenue, brl)}
+          />
+          <KpiCard
+            label="Previsto"
+            value={brl(cur.expectedRevenue)}
+            sub={cur.expectedRevenue > 0 ? `Realizado: ${pct(cur.revenue / cur.expectedRevenue)}` : undefined}
+            note={comparisonNote(cur.expectedRevenue, prev?.expectedRevenue, brl)}
+          />
+          <KpiCard
+            label="Despesas"
+            value={brl(cur.expenses)}
+            trend={trend(cur.expenses, prev?.expenses)}
+            invertTrend
+            note={comparisonNote(cur.expenses, prev?.expenses, brl)}
+          />
+          <KpiCard
+            label="Resultado"
+            value={brl(cur.profit)}
+            trend={trend(cur.profit, prev?.profit)}
+            note={comparisonNote(cur.profit, prev?.profit, brl)}
+          />
+          <KpiCard
+            label="Ticket Médio"
+            value={brl(cur.ticket)}
+            note={comparisonNote(cur.ticket, prev?.ticket, brl)}
+          />
           <KpiCard
             label="Ponto de Equilíbrio"
             value={breakEvenStudentsRounded != null ? `${breakEvenStudentsRounded} alunos` : "—"}
             sub={breakEvenStudents != null ? `Custo/aluno ${brl(cur.costPerStudent)}` : undefined}
           />
+        </div>
+      </div>
+
+      <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
+        <div className="flex items-center gap-2 mb-4">
+          <Wallet size={14} className="text-accent-blue" />
+          <div>
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+              Pr&oacute;ximos 30 Dias
+            </h3>
+            <p className="text-[11px] mt-1 text-text-secondary">
+              Previs&atilde;o de recebimentos e pagamentos entre {cashProjection.anchorDate.toLocaleDateString("pt-BR")} e {cashProjection.endDate.toLocaleDateString("pt-BR")}.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <KpiCard label="Recebimentos Previstos" value={brl(cashProjection.expectedIncoming)} sub={`${cashProjection.expectedIncomingCount} cobrança(s)`} />
+          <KpiCard label="Pagamentos Previstos" value={brl(cashProjection.scheduledOutgoing)} sub={`${cashProjection.scheduledOutgoingCount} conta(s)`} />
+          <KpiCard
+            label="Saldo Projetado"
+            value={brl(cashProjection.projectedNet)}
+            sub={`Data-base ${cashProjection.anchorDate.toLocaleDateString("pt-BR")}`}
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-text-secondary">
+          <span className="flex items-center gap-1.5">
+            <Calendar size={12} />
+            Janela de an&aacute;lise: {cashProjection.anchorDate.toLocaleDateString("pt-BR")} at&eacute; {cashProjection.endDate.toLocaleDateString("pt-BR")}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Clock size={12} />
+            Vencidas em aberto fora da proje&ccedil;&atilde;o: {brl(cashProjection.overdueOutgoing)}
+          </span>
         </div>
       </div>
 
@@ -136,8 +241,13 @@ export const Dashboard = () => {
           Alunos — {MF[curMo]}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <KpiCard label="Ativos" value={activeStudents} />
-          <KpiCard label="Pagantes" value={cur.payingStudents} sub={`${data.professors.length} profs`} />
+          <KpiCard label="Ativos" value={activeStudents} note={comparisonNote(activeStudents, prev?.activeStudents, (value) => String(value))} />
+          <KpiCard
+            label="Pagantes"
+            value={cur.payingStudents}
+            sub={`${data.professors.length} profs`}
+            note={comparisonNote(cur.payingStudents, prev?.payingStudents, (value) => String(value))}
+          />
           <KpiCard
             label="Em atraso acumulado"
             value={delinquentCount}
@@ -149,6 +259,107 @@ export const Dashboard = () => {
           <KpiCard label="Evasões" value={churnedStudents} trend={trend(churnedStudents, kpiPrev?.churnedStudents ?? null)} invertTrend />
           <KpiCard label="Churn Rate" value={churnRate.toFixed(1) + "%"} trend={trend(churnRate, kpiPrev?.churnRate ?? null)} invertTrend />
           <KpiCard label="Permanência" value={avgTenure.toFixed(1) + " m"} />
+        </div>
+      </div>
+
+      <div className="rounded-xl p-4 bg-surface-secondary border border-border-primary">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={14} className="text-accent-amber" />
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
+              Prioridades do M&ecirc;s
+            </h3>
+          </div>
+          <span className="text-[11px] text-text-tertiary font-mono">
+            {activeAlertCount > 0 ? `${activeAlertCount} alerta(s)` : "Sem pendências críticas"}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {priorityAlerts.length > 0 ? priorityAlerts.map((alert) => {
+            const isExpanded = expandedPriority === alert.id;
+            return (
+              <div
+                key={alert.id}
+                className={cn(
+                  "rounded-lg border overflow-hidden",
+                  alert.tone === "warning" && "border-accent-amber/20 bg-accent-amber/5",
+                  alert.tone === "info" && "border-accent-blue/20 bg-accent-blue/5"
+                )}
+              >
+                <button
+                  onClick={() => setExpandedPriority(isExpanded ? null : alert.id)}
+                  className="w-full flex items-start justify-between gap-3 px-3 py-3 text-left border-none bg-transparent cursor-pointer"
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-text-primary">{alert.title}</p>
+                    <p className="text-[11px] mt-1 text-text-secondary">{alert.detail}</p>
+                  </div>
+                  {alert.expandable ? (
+                    isExpanded ? <ChevronDown size={14} className="mt-0.5 text-text-tertiary" /> : <ChevronRight size={14} className="mt-0.5 text-text-tertiary" />
+                  ) : <ExternalLink size={14} className="mt-0.5 text-text-tertiary" />}
+                </button>
+
+                {isExpanded && alert.id === "delinquency" && (
+                  <div className="border-t border-border-primary/60 px-3 py-2.5 space-y-2">
+                    {delinquencySummary.students.map((entry) => (
+                      <div key={entry.student.id} className="flex items-center justify-between gap-3 rounded-md bg-surface-primary/50 px-3 py-2">
+                        <div>
+                          <p className="text-[11px] font-semibold text-text-primary">{entry.student.name}</p>
+                          <p className="text-[10px] text-text-secondary">
+                            Prof. {entry.professorName} · {entry.lateMonths.length} {entry.lateMonths.length === 1 ? "mês" : "meses"} · {brl(entry.totalOwed)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setPage("profs");
+                            setSelProf(entry.professorId);
+                            setSelPay(entry.student.id);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-tertiary text-text-secondary hover:text-text-primary transition-colors border border-border-secondary text-[10px] font-medium cursor-pointer"
+                        >
+                          Ver aluno
+                          <ExternalLink size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {isExpanded && alert.id === "overdue-bills" && (
+                  <div className="border-t border-border-primary/60 px-3 py-2.5 space-y-2">
+                    {overdueBills.map((bill) => (
+                      <div key={bill.id} className="flex items-center justify-between gap-3 rounded-md bg-surface-primary/50 px-3 py-2">
+                        <div>
+                          <p className="text-[11px] font-semibold text-text-primary">{bill.description}</p>
+                          <p className="text-[10px] text-text-secondary">
+                            Vencimento {bill.dueDate.split("-").reverse().join("/")} · {brl(bill.amount)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setPage("payables");
+                            setCurMo(bill.competenceMonth ?? new Date(bill.dueDate + "T12:00:00").getMonth());
+                            setSelBill(bill.id);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-tertiary text-text-secondary hover:text-text-primary transition-colors border border-border-secondary text-[10px] font-medium cursor-pointer"
+                        >
+                          Abrir conta
+                          <ExternalLink size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }) : (
+            <div className="rounded-lg border border-accent-green/20 bg-accent-green/5 px-3 py-2.5">
+              <p className="text-xs font-semibold text-text-primary">Sem pendências críticas</p>
+              <p className="text-[11px] mt-1 text-text-secondary">
+                O mês está sem contas vencidas, sem inadimplência acumulada relevante e sem alerta de equilíbrio.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

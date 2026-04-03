@@ -69,6 +69,8 @@ interface DataContextType {
   setSelProf: React.Dispatch<React.SetStateAction<string | null>>;
   selPay: string | null;
   setSelPay: React.Dispatch<React.SetStateAction<string | null>>;
+  selBill: string | null;
+  setSelBill: React.Dispatch<React.SetStateAction<string | null>>;
   calcMo: (m: number) => any;
   saveStatus: SaveStatus;
   handleAddProfessor: (d: {
@@ -145,6 +147,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [curMo, setCurMo] = useState(new Date().getMonth());
   const [selProf, setSelProf] = useState<string | null>(null);
   const [selPay, setSelPay] = useState<string | null>(null);
+  const [selBill, setSelBill] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [viewKpis, setViewKpis] = useState<ViewKpis | null>(null);
   const slugMapRef = useRef<SlugMap>({});
@@ -893,7 +896,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <DataContext.Provider
       value={{
         data, setData, instruments, dark, setDark, page, setPage, sideCol, setSideCol,
-        curMo, setCurMo, selProf, setSelProf, selPay, setSelPay,
+        curMo, setCurMo, selProf, setSelProf, selPay, setSelPay, selBill, setSelBill,
         calcMo, saveStatus,
         handleAddProfessor, handleUpdateProfessor, handleDeleteProfessor, handleSetProfessorPayrollOverride,
         handleAddStudent, handleUpdateStudent, handleDeleteStudent,

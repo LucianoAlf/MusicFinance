@@ -96,7 +96,7 @@ interface DataContextType {
   handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => Promise<string>;
   handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument>;
-  handleAddProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
+  handleAddProfessorInstrument: (profId: string, instrumentId: string, instrument?: Instrument) => Promise<void>;
   handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
   handleDeleteStudent: (profId: string, studentId: string) => Promise<void>;
   handleConfirmPayment: (profId: string, studentId: string, month: number, amount: number) => Promise<void>;
@@ -835,12 +835,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return inst;
   };
 
-  const handleAddProfessorInstrument = async (profId: string, instrumentId: string) => {
+  const handleAddProfessorInstrument = async (profId: string, instrumentId: string, instrument?: Instrument) => {
     if (!data) return;
     markSaving();
     const { error } = await apiAddProfInst(profId, instrumentId);
     if (error) { markError(); return; }
-    const inst = instruments.find(i => i.id === instrumentId);
+    const inst = instrument ?? instruments.find(i => i.id === instrumentId);
     if (inst) {
       setData(prev => prev ? { ...prev, professors: prev.professors.map(p => p.id === profId ? { ...p, instruments: [...p.instruments, inst] } : p) } : prev);
     }

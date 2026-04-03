@@ -268,11 +268,22 @@ export const Professors = () => {
 
   const prof = selProf ? data.professors.find((p) => p.id === selProf) : null;
   const confirmAddProf = async () => {
-    if (!npName.trim() || npInstIds.length === 0 || npSubmitting) return;
+    if (!npName.trim() || npSubmitting) return;
     setNpSubmitting(true);
     setNpError("");
     try {
-      const firstInstName = instruments.find(i => i.id === npInstIds[0])?.name || "";
+      const instrumentIds = await resolveNewProfessorInstrumentIds();
+      if (instrumentIds.length === 0) {
+        setNpError("Selecione ou digite pelo menos um instrumento.");
+        return;
+      }
+
+      const firstInstName =
+        instruments.find((instrument) => instrument.id === instrumentIds[0])?.name
+        || findInstrumentByName(npNewInst)?.name
+        || npNewInst.trim()
+        || "";
+
       const profId = await handleAddProfessor({
         name: npName.trim(),
         instrument: firstInstName,
@@ -280,7 +291,7 @@ export const Professors = () => {
         costPerStudent: npCompensationType === "per_student" ? Number(npCost) || 0 : 0,
         hourlyRate: npCompensationType === "hourly" ? Number(npHourlyRate) || 0 : 0,
         lessonDurationMinutes: npCompensationType === "hourly" ? Number(npLessonDuration) || 60 : 60,
-        instrumentIds: npInstIds,
+        instrumentIds,
       });
       if (npAvatarBlob && schoolId) {
         const url = await uploadProfessorAvatar(npAvatarBlob, schoolId, profId);
@@ -471,6 +482,7 @@ export const Professors = () => {
 
   const saveEditProf = async () => {
     if (!editProf || !schoolId) return;
+    await attachPendingInstrumentToProfessor(editProf);
     const updates: {
       name?: string;
       compensationType?: ProfessorCompensationType;
@@ -515,6 +527,47 @@ export const Professors = () => {
 
   const findInstrumentByName = (name: string) =>
     instruments.find((inst) => inst.name.trim().toLowerCase() === name.trim().toLowerCase());
+
+  const ensureInstrumentExists = async (name: string) => {
+    const normalizedName = name.trim();
+    if (!normalizedName) return null;
+
+    const existing = findInstrumentByName(normalizedName);
+    if (existing) return existing;
+
+    return handleAddInstrument(normalizedName);
+  };
+
+  const resolveNewProfessorInstrumentIds = async () => {
+    const instrumentIds = [...npInstIds];
+    const pendingInstrumentName = npNewInst.trim();
+
+    if (!pendingInstrumentName) return instrumentIds;
+
+    const instrument = await ensureInstrumentExists(pendingInstrumentName);
+    if (instrument && !instrumentIds.includes(instrument.id)) {
+      instrumentIds.push(instrument.id);
+    }
+
+    return instrumentIds;
+  };
+
+  const attachPendingInstrumentToProfessor = async (professorId: string) => {
+    const pendingInstrumentName = epNewInst.trim();
+    if (!pendingInstrumentName) return;
+
+    const instrument = await ensureInstrumentExists(pendingInstrumentName);
+    if (!instrument) return;
+
+    const currentProfessor = data.professors.find((entry) => entry.id === professorId);
+    const alreadyLinked = currentProfessor?.instruments.some((entry) => entry.id === instrument.id);
+
+    if (!alreadyLinked) {
+      await handleAddProfessorInstrument(professorId, instrument.id, instrument);
+    }
+
+    setEpNewInst("");
+  };
 
   return (
     <div className="space-y-5">
@@ -977,18 +1030,14 @@ export const Professors = () => {
                 value={npNewInst}
                 onChange={(e) => setNpNewInst(e.target.value)}
                 className={cn(inp, "flex-1")}
-                placeholder="Novo instrumento..."
+                placeholder="Ex: Grupo de baixo"
                 onKeyDown={async (e) => {
                   if (e.key === "Enter" && npNewInst.trim()) {
-                    const existing = findInstrumentByName(npNewInst);
-                    if (existing) {
-                      setNpInstIds(prev => prev.includes(existing.id) ? prev : [...prev, existing.id]);
-                      setNpNewInst("");
-                      return;
-                    }
                     try {
-                      const created = await handleAddInstrument(npNewInst.trim());
-                      setNpInstIds(prev => [...prev, created.id]);
+                      const instrument = await ensureInstrumentExists(npNewInst);
+                      if (instrument) {
+                        setNpInstIds(prev => prev.includes(instrument.id) ? prev : [...prev, instrument.id]);
+                      }
                       setNpNewInst("");
                     } catch (error) {
                       setNpError(formatAppError(error, "Erro ao criar instrumento."));
@@ -1002,15 +1051,11 @@ export const Professors = () => {
                   e.preventDefault();
                   e.stopPropagation();
                   if (npNewInst.trim()) {
-                    const existing = findInstrumentByName(npNewInst);
-                    if (existing) {
-                      setNpInstIds(prev => prev.includes(existing.id) ? prev : [...prev, existing.id]);
-                      setNpNewInst("");
-                      return;
-                    }
                     try {
-                      const created = await handleAddInstrument(npNewInst.trim());
-                      setNpInstIds(prev => [...prev, created.id]);
+                      const instrument = await ensureInstrumentExists(npNewInst);
+                      if (instrument) {
+                        setNpInstIds(prev => prev.includes(instrument.id) ? prev : [...prev, instrument.id]);
+                      }
                       setNpNewInst("");
                     } catch (error) {
                       setNpError(formatAppError(error, "Erro ao criar instrumento."));
@@ -1057,7 +1102,7 @@ export const Professors = () => {
         {npError && <p className="text-accent-red text-xs mt-4 mb-0">{npError}</p>}
         <div className="flex gap-2 mt-6">
           <button onClick={() => setShowAddProf(false)} className="px-4 py-2.5 rounded-lg text-xs font-medium border-none cursor-pointer bg-surface-tertiary text-text-secondary hover:text-text-primary">Cancelar</button>
-          <button onClick={confirmAddProf} disabled={!npName.trim() || npInstIds.length === 0 || npSubmitting} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer">
+          <button onClick={confirmAddProf} disabled={!npName.trim() || (!npNewInst.trim() && npInstIds.length === 0) || npSubmitting} className="flex-1 py-2.5 rounded-lg bg-accent-green text-surface-primary text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer">
             {npSubmitting ? "Cadastrando..." : "Cadastrar"}
           </button>
         </div>
@@ -1377,13 +1422,13 @@ export const Professors = () => {
                     value={epNewInst}
                     onChange={(e) => setEpNewInst(e.target.value)}
                     className={cn(inp, "flex-1")}
-                    placeholder="Novo instrumento..."
+                    placeholder="Ex: Grupo de baixo"
                     onKeyDown={async (e) => {
                       if (e.key === "Enter" && epNewInst.trim()) {
                         try {
-                          const existing = findInstrumentByName(epNewInst);
-                          const inst = existing ?? await handleAddInstrument(epNewInst.trim());
-                          await handleAddProfessorInstrument(editProf, inst.id);
+                          const inst = await ensureInstrumentExists(epNewInst);
+                          if (!inst) return;
+                          await handleAddProfessorInstrument(editProf, inst.id, inst);
                           setEpNewInst("");
                         } catch (error) {
                           console.error("[EditProfessor] erro ao adicionar instrumento:", error);
@@ -1398,9 +1443,9 @@ export const Professors = () => {
                       e.stopPropagation();
                       if (epNewInst.trim()) {
                         try {
-                          const existing = findInstrumentByName(epNewInst);
-                          const inst = existing ?? await handleAddInstrument(epNewInst.trim());
-                          await handleAddProfessorInstrument(editProf, inst.id);
+                          const inst = await ensureInstrumentExists(epNewInst);
+                          if (!inst) return;
+                          await handleAddProfessorInstrument(editProf, inst.id, inst);
                           setEpNewInst("");
                         } catch (error) {
                           console.error("[EditProfessor] erro ao adicionar instrumento:", error);

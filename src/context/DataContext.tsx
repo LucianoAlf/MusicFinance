@@ -26,6 +26,7 @@ import {
   updateStudent as apiUpdateStudent,
   deleteStudent as apiDeleteStudent,
   upsertPayment as apiUpsertPayment,
+  syncStudentTuitionPayments as apiSyncStudentTuitionPayments,
   batchInsertPayments as apiBatchInsertPayments,
   addCostCenter as apiAddCostCenter,
   updateCostCenter as apiUpdateCostCenter,
@@ -365,7 +366,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     try {
-      const tuitionVal = d.tuition || data.config.tuition;
+      const tuitionVal = d.tuition ?? data.config.tuition;
       const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
       const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, dueDay: d.dueDay, paymentMethod: d.paymentMethod });
       if (error || !row) {
@@ -389,7 +390,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
-      const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
+      const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: row.tuition_amount != null ? Number(row.tuition_amount) : tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
       setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
       markSaved();
       return row.id;
@@ -405,6 +406,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaving();
     const { data: row, error } = await apiUpdateStudent(studentId, updates);
     if (error || !row) { markError(); return; }
+    if (updates.tuitionAmount !== undefined) {
+      const { error: paymentSyncError } = await apiSyncStudentTuitionPayments({
+        studentId,
+        schoolId,
+        year: data.config.year,
+        amount: updates.tuitionAmount,
+      });
+      if (paymentSyncError) {
+        markError();
+        return;
+      }
+    }
     setData((prev) => {
       if (!prev) return prev;
       return {
@@ -419,7 +432,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             hour: row.lesson_time ?? s.hour,
             enrollmentDate: row.enrollment_date || undefined,
             exitDate: row.exit_date || undefined,
-            tuitionAmount: row.tuition_amount ? Number(row.tuition_amount) : s.tuitionAmount,
+            tuitionAmount: row.tuition_amount != null ? Number(row.tuition_amount) : s.tuitionAmount,
             instrumentId: row.instrument_id || s.instrumentId,
             instrumentName: row.instrument_id ? instruments.find(i => i.id === row.instrument_id)?.name : s.instrumentName,
             phone: row.phone || undefined,
@@ -427,6 +440,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             responsiblePhone: row.responsible_phone || undefined,
             dueDay: row.due_day ?? s.dueDay,
             paymentMethod: row.payment_method || undefined,
+            payments: updates.tuitionAmount !== undefined
+              ? s.payments.map((payment) => {
+                  if (!payment) return payment;
+                  if (payment.status === "PAID" || payment.status === "WAIVED") return payment;
+                  return { ...payment, amount: updates.tuitionAmount };
+                })
+              : s.payments,
           } : s),
         })),
       };

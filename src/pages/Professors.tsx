@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { getProfessorCompensationLabel, getProfessorPayrollAmount } from "../lib/professorCompensation";
@@ -317,7 +317,7 @@ export const Professors = () => {
         name: nsName.trim(),
         day: nsDay,
         time: nsHour,
-        tuition: Number(nsVal) || data.config.tuition,
+        tuition: nsVal.trim() === "" ? data.config.tuition : Number(nsVal),
         enrollmentDate: nsEnroll,
         instrumentId: nsInstId || undefined,
         personId: nsExisting && nsPersonId ? nsPersonId : undefined,
@@ -352,6 +352,17 @@ export const Professors = () => {
     setEsRespPhone(s.responsiblePhone || "");
   };
 
+  useEffect(() => {
+    if (!editStudent || !data) return;
+    const refreshedStudent = data.professors
+      .flatMap((entry) => entry.students)
+      .find((entry) => entry.id === editStudent.id);
+
+    if (refreshedStudent) {
+      setEditStudent(refreshedStudent);
+    }
+  }, [data, editStudent]);
+
   const saveEditStudent = async () => {
     if (!editStudent) return;
     await handleUpdateStudent(editStudent.id, {
@@ -360,7 +371,7 @@ export const Professors = () => {
       day: esDay || undefined,
       hour: esHour || undefined,
       enrollmentDate: esEnroll || undefined,
-      tuitionAmount: esTuition ? Number(esTuition) : undefined,
+      tuitionAmount: esTuition.trim() === "" ? undefined : Number(esTuition),
       instrumentId: esInstId || undefined,
       phone: esPhone,
       responsibleName: esRespName,
@@ -369,6 +380,20 @@ export const Professors = () => {
       paymentMethod: esPayMethod || undefined,
     });
     setEditStudent(null);
+  };
+
+  const currentEditStudentStatus = editStudent ? getDisplayStatus(editStudent, curMo) : null;
+  const currentEditStudentPayment = editStudent?.payments[curMo] ?? null;
+  const currentEditStudentExpectedAmount = esTuition.trim() === "" ? data.config.tuition : Number(esTuition);
+
+  const waiveCurrentEditStudentPayment = async () => {
+    if (!editStudent || !prof) return;
+    await handleWaivePayment(prof.id, editStudent.id, curMo);
+  };
+
+  const revertCurrentEditStudentPayment = async () => {
+    if (!editStudent || !prof) return;
+    await handleRevertPayment(prof.id, editStudent.id, curMo, currentEditStudentExpectedAmount);
   };
 
   const changeSituation = async (studentId: string, newSit: string) => {
@@ -1337,6 +1362,42 @@ export const Professors = () => {
             <div className="flex items-center justify-between mt-2">
               <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Professor</span>
               <span className="text-[11px] text-text-primary">{prof?.name} ({prof?.instruments.length > 0 ? prof.instruments.map(i => i.name).join(", ") : prof?.instrument})</span>
+            </div>
+          </div>
+          <div className="rounded-lg p-3 border border-border-secondary bg-surface-tertiary space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Mensalidade {MS[curMo]}</span>
+              <span className={cn(
+                "text-[10px] font-semibold px-2 py-1 rounded-full",
+                currentEditStudentStatus === "PAID" && "bg-accent-green/10 text-accent-green",
+                currentEditStudentStatus === "WAIVED" && "bg-surface-secondary text-text-secondary",
+                currentEditStudentStatus === "LATE" && "bg-accent-red/10 text-accent-red",
+                (currentEditStudentStatus === "PENDING" || currentEditStudentStatus === "FUTURE") && "bg-accent-amber/10 text-accent-amber"
+              )}>
+                {currentEditStudentStatus === "WAIVED" ? "Isenta" : currentEditStudentStatus === "PAID" ? "Paga" : currentEditStudentStatus === "LATE" ? "Atrasada" : "Pendente"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Valor previsto</span>
+              <span className="text-[11px] font-mono font-medium text-text-primary">{brl(currentEditStudentPayment?.amount ?? currentEditStudentExpectedAmount)}</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {currentEditStudentStatus !== "WAIVED" && (
+                <button
+                  onClick={waiveCurrentEditStudentPayment}
+                  className="w-full py-2.5 rounded-lg bg-surface-secondary text-text-primary text-xs font-medium hover:bg-surface-secondary/80 transition-colors border border-border-secondary cursor-pointer"
+                >
+                  Isentar mensalidade do mês
+                </button>
+              )}
+              {(currentEditStudentStatus === "PAID" || currentEditStudentStatus === "WAIVED") && (
+                <button
+                  onClick={revertCurrentEditStudentPayment}
+                  className="w-full py-2.5 rounded-lg bg-accent-amber/10 text-accent-amber text-xs font-medium hover:bg-accent-amber/20 transition-colors border border-border-secondary cursor-pointer"
+                >
+                  Reverter para pendente
+                </button>
+              )}
             </div>
           </div>
         </div>

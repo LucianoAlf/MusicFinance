@@ -158,7 +158,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
             payments: arr,
             enrollmentDate: s.enrollment_date || undefined,
             exitDate: s.exit_date || undefined,
-            tuitionAmount: s.tuition_amount ? Number(s.tuition_amount) : undefined,
+            tuitionAmount: s.tuition_amount != null ? Number(s.tuition_amount) : undefined,
             instrumentId: s.instrument_id || undefined,
             instrumentName: s.instrument_id ? instrumentMap.get(s.instrument_id) : undefined,
             phone: s.phone || undefined,
@@ -405,7 +405,7 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
     situation: "Ativo",
     lesson_day: data.day,
     lesson_time: data.time,
-    tuition_amount: data.tuition || null,
+    tuition_amount: data.tuition ?? null,
     enrollment_date: data.enrollmentDate || new Date().toISOString().split("T")[0],
     instrument_id: data.instrumentId || null,
     due_day: data.dueDay ?? 5,
@@ -459,6 +459,16 @@ export async function upsertPayment(data: { studentId: string; schoolId: string;
     return supabase.from("payments").update(row).eq("id", existing.id);
   }
   return supabase.from("payments").insert({ student_id: data.studentId, school_id: data.schoolId, year: data.year, month: data.month, ...row });
+}
+
+export async function syncStudentTuitionPayments(data: { studentId: string; schoolId: string; year: number; amount: number }) {
+  return supabase
+    .from("payments")
+    .update({ amount: data.amount })
+    .eq("student_id", data.studentId)
+    .eq("school_id", data.schoolId)
+    .eq("year", data.year)
+    .in("status", ["PENDING", "LATE"]);
 }
 
 // ─── WRITES: Cost Centers ──────────────────────────────────────────────────

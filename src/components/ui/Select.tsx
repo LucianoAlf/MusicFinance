@@ -85,7 +85,7 @@ export function Select({
               "bg-surface-secondary border-border-secondary"
             )}
           >
-            <RadixSelect.Viewport className="p-1">
+            <RadixSelect.Viewport className="p-1 max-h-[240px] overflow-y-auto">
               {options.map((opt) => (
                 <RadixSelect.Item
                   key={opt.value}

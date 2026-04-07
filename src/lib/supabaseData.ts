@@ -38,7 +38,7 @@ interface DbProfessorMonthlyPayroll {
   payroll_source: "auto" | "override";
   notes: string | null;
 }
-interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; phone: string | null; responsible_name: string | null; responsible_phone: string | null; due_day: number | null; payment_method: string | null; }
+interface DbStudent { id: string; professor_id: string; person_id: string; name: string; situation: string; lesson_day: string | null; lesson_time: string | null; tuition_amount: number | null; enrollment_date: string | null; exit_date: string | null; instrument_id: string | null; phone: string | null; responsible_name: string | null; responsible_phone: string | null; due_day: number | null; payment_method: string | null; tuition_exempt: boolean | null; }
 interface DbInstrument { id: string; school_id: string; name: string; }
 interface DbProfInstrument { professor_id: string; instrument_id: string; instruments: { id: string; name: string } | { id: string; name: string }[] | null; }
 interface DbPayment { id: string; student_id: string; year: number; month: number; amount: number; status: string; }
@@ -159,6 +159,7 @@ export async function loadSchoolData(schoolId: string): Promise<{ data: Dashboar
             enrollmentDate: s.enrollment_date || undefined,
             exitDate: s.exit_date || undefined,
             tuitionAmount: s.tuition_amount != null ? Number(s.tuition_amount) : undefined,
+            tuitionExempt: !!s.tuition_exempt,
             instrumentId: s.instrument_id || undefined,
             instrumentName: s.instrument_id ? instrumentMap.get(s.instrument_id) : undefined,
             phone: s.phone || undefined,
@@ -397,7 +398,7 @@ export async function deleteProfessorAvatar(schoolId: string, professorId: strin
 
 // ─── WRITES: Students ──────────────────────────────────────────────────────
 
-export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) {
+export async function addStudent(schoolId: string, data: { professorId: string; name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string; tuitionExempt?: boolean }) {
   const row: any = {
     school_id: schoolId,
     professor_id: data.professorId,
@@ -410,12 +411,13 @@ export async function addStudent(schoolId: string, data: { professorId: string; 
     instrument_id: data.instrumentId || null,
     due_day: data.dueDay ?? 5,
     payment_method: data.paymentMethod || null,
+    tuition_exempt: data.tuitionExempt ?? false,
   };
   if (data.personId) row.person_id = data.personId;
-  return supabase.from("students").insert(row).select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id, due_day, payment_method").maybeSingle();
+  return supabase.from("students").insert(row).select("id, professor_id, person_id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, instrument_id, due_day, payment_method, tuition_exempt").maybeSingle();
 }
 
-export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) {
+export async function updateStudent(studentId: string, data: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string; tuitionExempt?: boolean }) {
   const update: any = {};
   if (data.name !== undefined) update.name = data.name;
   if (data.situation !== undefined) update.situation = data.situation;
@@ -429,7 +431,8 @@ export async function updateStudent(studentId: string, data: { name?: string; si
   if (data.responsiblePhone !== undefined) update.responsible_phone = data.responsiblePhone;
   if (data.dueDay !== undefined) update.due_day = data.dueDay;
   if (data.paymentMethod !== undefined) update.payment_method = data.paymentMethod;
-  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method").maybeSingle();
+  if (data.tuitionExempt !== undefined) update.tuition_exempt = data.tuitionExempt;
+  return supabase.from("students").update(update).eq("id", studentId).select("id, name, situation, lesson_day, lesson_time, tuition_amount, enrollment_date, exit_date, instrument_id, phone, responsible_name, responsible_phone, due_day, payment_method, tuition_exempt").maybeSingle();
 }
 
 export async function deleteStudent(studentId: string) {
@@ -469,6 +472,26 @@ export async function syncStudentTuitionPayments(data: { studentId: string; scho
     .eq("school_id", data.schoolId)
     .eq("year", data.year)
     .in("status", ["PENDING", "LATE"]);
+}
+
+export async function syncStudentExemptionPayments(data: { studentId: string; schoolId: string; year: number; tuitionExempt: boolean; amount: number }) {
+  if (data.tuitionExempt) {
+    return supabase
+      .from("payments")
+      .update({ amount: 0, status: "WAIVED", paid_at: null })
+      .eq("student_id", data.studentId)
+      .eq("school_id", data.schoolId)
+      .eq("year", data.year)
+      .in("status", ["PENDING", "LATE", "WAIVED"]);
+  }
+
+  return supabase
+    .from("payments")
+    .update({ amount: data.amount, status: "PENDING", paid_at: null })
+    .eq("student_id", data.studentId)
+    .eq("school_id", data.schoolId)
+    .eq("year", data.year)
+    .eq("status", "WAIVED");
 }
 
 // ─── WRITES: Cost Centers ──────────────────────────────────────────────────

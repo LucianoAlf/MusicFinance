@@ -151,6 +151,7 @@ export const Professors = () => {
   const [nsInstId, setNsInstId] = useState("");
   const [nsDueDay, setNsDueDay] = useState("5");
   const [nsPayMethod, setNsPayMethod] = useState("");
+  const [nsTuitionExempt, setNsTuitionExempt] = useState(false);
   const [nsSubmitting, setNsSubmitting] = useState(false);
   const [nsExisting, setNsExisting] = useState(false);
   const [nsPersonId, setNsPersonId] = useState("");
@@ -163,6 +164,7 @@ export const Professors = () => {
   const [esSit, setEsSit] = useState("");
   const [esEnroll, setEsEnroll] = useState("");
   const [esTuition, setEsTuition] = useState("");
+  const [esTuitionExempt, setEsTuitionExempt] = useState(false);
   const [esInstId, setEsInstId] = useState("");
   const [esDueDay, setEsDueDay] = useState("5");
   const [esPayMethod, setEsPayMethod] = useState("");
@@ -246,8 +248,8 @@ export const Professors = () => {
     _totalEnrollments += p.students.length;
     let activeCount = 0;
     p.students.forEach((s) => {
-      _allPersonIds.add(s.personId || s.id);
       if (s.situation === "Ativo") {
+        _allPersonIds.add(s.personId || s.id);
         activeCount++;
       }
       const pm = s.payments && s.payments[curMo];
@@ -317,16 +319,17 @@ export const Professors = () => {
         name: nsName.trim(),
         day: nsDay,
         time: nsHour,
-        tuition: nsVal.trim() === "" ? data.config.tuition : Number(nsVal),
+        tuition: nsTuitionExempt ? 0 : (nsVal.trim() === "" ? data.config.tuition : Number(nsVal)),
         enrollmentDate: nsEnroll,
         instrumentId: nsInstId || undefined,
         personId: nsExisting && nsPersonId ? nsPersonId : undefined,
         dueDay: Number(nsDueDay) || 5,
         paymentMethod: nsPayMethod || undefined,
+        tuitionExempt: nsTuitionExempt,
       });
       setShowAddStud(null);
       setNsName(""); setNsEnroll(new Date().toISOString().split("T")[0]); setNsInstId("");
-      setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod("");
+      setNsExisting(false); setNsPersonId(""); setNsDueDay("5"); setNsPayMethod(""); setNsTuitionExempt(false);
       setNsError("");
     } catch (e) {
       console.error("[confirmAddStudent] erro ao cadastrar aluno:", e);
@@ -344,6 +347,7 @@ export const Professors = () => {
     setEsSit(s.situation || "Ativo");
     setEsEnroll(s.enrollmentDate || "");
     setEsTuition(s.tuitionAmount?.toString() || data.config.tuition.toString());
+    setEsTuitionExempt(!!s.tuitionExempt);
     setEsInstId(s.instrumentId || "");
     setEsDueDay(s.dueDay?.toString() || "5");
     setEsPayMethod(s.paymentMethod || "");
@@ -371,20 +375,21 @@ export const Professors = () => {
       day: esDay || undefined,
       hour: esHour || undefined,
       enrollmentDate: esEnroll || undefined,
-      tuitionAmount: esTuition.trim() === "" ? undefined : Number(esTuition),
+      tuitionAmount: esTuitionExempt ? 0 : (esTuition.trim() === "" ? undefined : Number(esTuition)),
       instrumentId: esInstId || undefined,
       phone: esPhone,
       responsibleName: esRespName,
       responsiblePhone: esRespPhone,
       dueDay: Number(esDueDay) || 5,
       paymentMethod: esPayMethod || undefined,
+      tuitionExempt: esTuitionExempt,
     });
     setEditStudent(null);
   };
 
   const currentEditStudentStatus = editStudent ? getDisplayStatus(editStudent, curMo) : null;
   const currentEditStudentPayment = editStudent?.payments[curMo] ?? null;
-  const currentEditStudentExpectedAmount = esTuition.trim() === "" ? data.config.tuition : Number(esTuition);
+  const currentEditStudentExpectedAmount = esTuitionExempt ? 0 : (esTuition.trim() === "" ? data.config.tuition : Number(esTuition));
 
   const waiveCurrentEditStudentPayment = async () => {
     if (!editStudent || !prof) return;
@@ -545,7 +550,7 @@ export const Professors = () => {
 
   const openPayPopover = (profId: string, s: Student, mi: number) => {
     const pm = s.payments[mi];
-    const tuition = s.tuitionAmount || data.config.tuition;
+    const tuition = s.tuitionAmount ?? data.config.tuition;
     setPayPopover({ profId, student: s, month: mi, payment: pm, tuition });
     setPayAmount(pm ? pm.amount.toString() : tuition.toString());
   };
@@ -797,7 +802,7 @@ export const Professors = () => {
                   setBulkProcessing(true);
                   const selected = unpaid.filter((s) => bulkSelected.has(s.id));
                   for (const s of selected) {
-                    const amount = s.tuitionAmount || data.config.tuition;
+                    const amount = s.tuitionAmount ?? data.config.tuition;
                     await handleConfirmPayment(prof.id, s.id, curMo, amount);
                   }
                   setBulkProcessing(false);
@@ -846,13 +851,13 @@ export const Professors = () => {
                                 className="accent-accent-green w-3.5 h-3.5"
                               />
                               <span className="text-[11px] text-text-primary flex-1">{s.name}</span>
-                              <span className="text-[10px] font-mono text-text-secondary">{brl(s.tuitionAmount || data.config.tuition)}</span>
+                              <span className="text-[10px] font-mono text-text-secondary">{brl(s.tuitionAmount ?? data.config.tuition)}</span>
                             </label>
                           ))}
                         </div>
                         <div className="flex items-center justify-between pt-2 border-t border-border-primary">
                           <span className="text-[10px] text-text-secondary">
-                            {bulkSelected.size} selecionados · Total: <span className="font-mono font-bold text-accent-green">{brl(unpaid.filter((s) => bulkSelected.has(s.id)).reduce((sum, s) => sum + (s.tuitionAmount || data.config.tuition), 0))}</span>
+                            {bulkSelected.size} selecionados · Total: <span className="font-mono font-bold text-accent-green">{brl(unpaid.filter((s) => bulkSelected.has(s.id)).reduce((sum, s) => sum + (s.tuitionAmount ?? data.config.tuition), 0))}</span>
                           </span>
                           <button
                             onClick={confirmBulk}
@@ -1211,7 +1216,24 @@ export const Professors = () => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Mensalidade (R$)</label>
-              <input type="number" value={nsVal} onChange={(e) => setNsVal(e.target.value)} className={inp} />
+              <input type="number" value={nsVal} onChange={(e) => setNsVal(e.target.value)} className={inp} disabled={nsTuitionExempt} />
+              <label className="mt-2 flex items-center gap-2 cursor-pointer select-none py-1">
+                <input
+                  type="checkbox"
+                  checked={nsTuitionExempt}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setNsTuitionExempt(checked);
+                    if (checked) {
+                      setNsVal("0");
+                    } else if (nsVal.trim() === "0" || nsVal.trim() === "") {
+                      setNsVal(data.config.tuition.toString());
+                    }
+                  }}
+                  className="accent-accent-blue w-3.5 h-3.5"
+                />
+                <span className="text-[11px] font-medium text-text-primary">Matrícula isenta de mensalidade</span>
+              </label>
             </div>
             <div>
               <label className={lbl}>Dia de Vencimento</label>
@@ -1257,7 +1279,7 @@ export const Professors = () => {
         open={!!editStudent}
         onOpenChange={(v) => { if (!v) setEditStudent(null); }}
         title="Detalhes do Aluno"
-        size="md"
+        size="lg"
       >
         <div className="space-y-4">
           <div>
@@ -1300,7 +1322,24 @@ export const Professors = () => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Mensalidade (R$)</label>
-              <input type="number" value={esTuition} onChange={(e) => setEsTuition(e.target.value)} className={inp} />
+              <input type="number" value={esTuition} onChange={(e) => setEsTuition(e.target.value)} className={inp} disabled={esTuitionExempt} />
+              <label className="mt-2 flex items-center gap-2 cursor-pointer select-none py-1">
+                <input
+                  type="checkbox"
+                  checked={esTuitionExempt}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setEsTuitionExempt(checked);
+                    if (checked) {
+                      setEsTuition("0");
+                    } else if (esTuition.trim() === "0" || esTuition.trim() === "") {
+                      setEsTuition(data.config.tuition.toString());
+                    }
+                  }}
+                  className="accent-accent-blue w-3.5 h-3.5"
+                />
+                <span className="text-[11px] font-medium text-text-primary">Matrícula isenta de mensalidade</span>
+              </label>
             </div>
             <div>
               <label className={lbl}>Dia de Vencimento</label>
@@ -1381,6 +1420,11 @@ export const Professors = () => {
               <span className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Valor previsto</span>
               <span className="text-[11px] font-mono font-medium text-text-primary">{brl(currentEditStudentPayment?.amount ?? currentEditStudentExpectedAmount)}</span>
             </div>
+            {esTuitionExempt && (
+              <div className="text-[11px] text-text-secondary rounded-lg border border-border-secondary bg-surface-secondary px-3 py-2">
+                Esta matrícula está marcada como isenta permanente. Ela fica zerada e não deve impactar ticket médio nem KPIs financeiros da mensalidade.
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {currentEditStudentStatus !== "WAIVED" && (
                 <button

@@ -37,6 +37,7 @@ export interface Student {
   enrollmentDate?: string;
   exitDate?: string;
   tuitionAmount?: number;
+  tuitionExempt?: boolean;
   instrumentId?: string;
   instrumentName?: string;
   phone?: string;

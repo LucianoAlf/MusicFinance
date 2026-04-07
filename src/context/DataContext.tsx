@@ -26,6 +26,7 @@ import {
   updateStudent as apiUpdateStudent,
   deleteStudent as apiDeleteStudent,
   upsertPayment as apiUpsertPayment,
+  syncStudentExemptionPayments as apiSyncStudentExemptionPayments,
   syncStudentTuitionPayments as apiSyncStudentTuitionPayments,
   batchInsertPayments as apiBatchInsertPayments,
   addCostCenter as apiAddCostCenter,
@@ -94,8 +95,8 @@ interface DataContextType {
   }) => Promise<void>;
   handleDeleteProfessor: (profId: string) => Promise<void>;
   handleSetProfessorPayrollOverride: (profId: string, month: number, overrideAmount: number | null) => Promise<void>;
-  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }) => Promise<string>;
-  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => Promise<void>;
+  handleAddStudent: (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string; tuitionExempt?: boolean }) => Promise<string>;
+  handleUpdateStudent: (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string; tuitionExempt?: boolean }) => Promise<void>;
   handleAddInstrument: (name: string) => Promise<Instrument>;
   handleAddProfessorInstrument: (profId: string, instrumentId: string, instrument?: Instrument) => Promise<void>;
   handleRemoveProfessorInstrument: (profId: string, instrumentId: string) => Promise<void>;
@@ -152,7 +153,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [viewKpis, setViewKpis] = useState<ViewKpis | null>(null);
   const slugMapRef = useRef<SlugMap>({});
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const markSaving = useCallback(() => {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -362,13 +363,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     markSaved();
   };
 
-  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string }): Promise<string> => {
+  const handleAddStudent = async (profId: string, d: { name: string; day: string; time: string; tuition?: number; enrollmentDate?: string; instrumentId?: string; personId?: string; dueDay?: number; paymentMethod?: string; tuitionExempt?: boolean }): Promise<string> => {
     if (!data || !schoolId) throw new Error("Escola não encontrada.");
     markSaving();
     try {
-      const tuitionVal = d.tuition ?? data.config.tuition;
+      const tuitionVal = d.tuitionExempt ? 0 : (d.tuition ?? data.config.tuition);
       const enrollDate = d.enrollmentDate || new Date().toISOString().split("T")[0];
-      const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, dueDay: d.dueDay, paymentMethod: d.paymentMethod });
+      const { data: row, error } = await apiAddStudent(schoolId, { professorId: profId, name: d.name, day: d.day, time: d.time, tuition: tuitionVal, enrollmentDate: enrollDate, instrumentId: d.instrumentId, personId: d.personId, dueDay: d.dueDay, paymentMethod: d.paymentMethod, tuitionExempt: d.tuitionExempt });
       if (error || !row) {
         const message = formatAppError(error, "Erro ao cadastrar aluno.");
         markError();
@@ -378,8 +379,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const payments12: (Payment | null)[] = [];
       const paymentInserts = [];
       for (let m = 0; m < 12; m++) {
-        paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: "PENDING" });
-        payments12.push({ amount: tuitionVal, status: "PENDING" as PaymentStatus });
+        paymentInserts.push({ studentId: row.id, schoolId, year: data.config.year, month: m + 1, amount: tuitionVal, status: d.tuitionExempt ? "WAIVED" : "PENDING" });
+        payments12.push({ amount: tuitionVal, status: (d.tuitionExempt ? "WAIVED" : "PENDING") as PaymentStatus });
       }
       const { error: payErr } = await apiBatchInsertPayments(paymentInserts);
       if (payErr) {
@@ -390,7 +391,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const instName = d.instrumentId ? instruments.find(i => i.id === d.instrumentId)?.name : undefined;
-      const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: row.tuition_amount != null ? Number(row.tuition_amount) : tuitionVal, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
+      const newStudent = { id: row.id, personId: row.person_id || row.id, name: row.name, situation: "Ativo", hour: row.lesson_time || "", day: row.lesson_day || "", payments: payments12, enrollmentDate: row.enrollment_date || enrollDate, tuitionAmount: row.tuition_amount != null ? Number(row.tuition_amount) : tuitionVal, tuitionExempt: !!row.tuition_exempt, instrumentId: d.instrumentId, instrumentName: instName, dueDay: row.due_day ?? 5, paymentMethod: row.payment_method || d.paymentMethod };
       setData((prev) => prev ? { ...prev, professors: prev.professors.map((p) => p.id === profId ? { ...p, students: [...p.students, newStudent] } : p) } : prev);
       markSaved();
       return row.id;
@@ -401,17 +402,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string }) => {
+  const handleUpdateStudent = async (studentId: string, updates: { name?: string; situation?: string; day?: string; hour?: string; enrollmentDate?: string; tuitionAmount?: number; instrumentId?: string; phone?: string; responsibleName?: string; responsiblePhone?: string; dueDay?: number; paymentMethod?: string; tuitionExempt?: boolean }) => {
     if (!data || !schoolId) return;
     markSaving();
     const { data: row, error } = await apiUpdateStudent(studentId, updates);
     if (error || !row) { markError(); return; }
+    const nextTuitionAmount = row.tuition_amount != null ? Number(row.tuition_amount) : (updates.tuitionAmount ?? data.config.tuition);
+    if (updates.tuitionExempt !== undefined) {
+      const { error: exemptionSyncError } = await apiSyncStudentExemptionPayments({
+        studentId,
+        schoolId,
+        year: data.config.year,
+        tuitionExempt: updates.tuitionExempt,
+        amount: nextTuitionAmount,
+      });
+      if (exemptionSyncError) {
+        markError();
+        return;
+      }
+    }
     if (updates.tuitionAmount !== undefined) {
       const { error: paymentSyncError } = await apiSyncStudentTuitionPayments({
         studentId,
         schoolId,
         year: data.config.year,
-        amount: updates.tuitionAmount,
+        amount: nextTuitionAmount,
       });
       if (paymentSyncError) {
         markError();
@@ -433,6 +448,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             enrollmentDate: row.enrollment_date || undefined,
             exitDate: row.exit_date || undefined,
             tuitionAmount: row.tuition_amount != null ? Number(row.tuition_amount) : s.tuitionAmount,
+            tuitionExempt: row.tuition_exempt ?? s.tuitionExempt,
             instrumentId: row.instrument_id || s.instrumentId,
             instrumentName: row.instrument_id ? instruments.find(i => i.id === row.instrument_id)?.name : s.instrumentName,
             phone: row.phone || undefined,
@@ -440,11 +456,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             responsiblePhone: row.responsible_phone || undefined,
             dueDay: row.due_day ?? s.dueDay,
             paymentMethod: row.payment_method || undefined,
-            payments: updates.tuitionAmount !== undefined
+            payments: updates.tuitionExempt !== undefined
+              ? s.payments.map((payment) => {
+                  if (!payment) return payment;
+                  if (payment.status === "PAID") return payment;
+                  if (updates.tuitionExempt) return { amount: 0, status: "WAIVED" as PaymentStatus };
+                  return payment.status === "WAIVED"
+                    ? { amount: nextTuitionAmount, status: "PENDING" as PaymentStatus }
+                    : payment;
+                })
+              : updates.tuitionAmount !== undefined
               ? s.payments.map((payment) => {
                   if (!payment) return payment;
                   if (payment.status === "PAID" || payment.status === "WAIVED") return payment;
-                  return { ...payment, amount: updates.tuitionAmount };
+                  return { ...payment, amount: nextTuitionAmount };
                 })
               : s.payments,
           } : s),

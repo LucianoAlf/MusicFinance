@@ -42,7 +42,9 @@ export function getDashboardMonthMetrics(data: DashboardData, monthIndex: number
     professor.students.forEach((student) => {
       if (student.situation === "Ativo") {
         activePersonIds.add(student.personId || student.id);
-        expectedTuitionRevenue += student.tuitionAmount || 0;
+        if (!student.tuitionExempt) {
+          expectedTuitionRevenue += student.tuitionAmount ?? 0;
+        }
       }
 
       const payment = student.payments[monthIndex];
@@ -133,6 +135,7 @@ export function getCashProjection30Days(
   data.professors.forEach((professor) => {
     professor.students.forEach((student) => {
       if (student.situation !== "Ativo") return;
+      if (student.tuitionExempt) return;
       const dueDay = student.dueDay ?? 5;
 
       monthKeys.forEach(({ year, monthIndex }) => {

@@ -15,9 +15,9 @@ interface ModalProps {
 }
 
 const sizeClass = {
-  sm: "w-80",
-  md: "w-[420px]",
-  lg: "w-[560px]",
+  sm: "w-[min(20rem,calc(100vw-1.5rem))]",
+  md: "w-[min(26.25rem,calc(100vw-1.5rem))]",
+  lg: "w-[min(35rem,calc(100vw-1.5rem))]",
 };
 
 export function Modal({ open, onOpenChange, title, size = "md", children }: ModalProps) {
@@ -28,7 +28,7 @@ export function Modal({ open, onOpenChange, title, size = "md", children }: Moda
         <Dialog.Content
           className={cn(
             "modal-content fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-            "rounded-xl p-6 focus:outline-none",
+            "rounded-xl p-6 focus:outline-none max-h-[90vh] overflow-y-auto",
             sizeClass[size],
             "bg-surface-secondary border border-border-primary shadow-2xl shadow-black/50"
           )}

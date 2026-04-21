@@ -28,6 +28,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   createSchool: (name: string, tuition?: number, passport?: number, year?: number) => Promise<{ error?: string }>;
   refreshSchools: () => Promise<void>;
+  networkError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -67,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [schoolsLoaded, setSchoolsLoaded] = useState(false);
   // Inicializar selectedSchool do localStorage SINCRONAMENTE para evitar flash
   const [selectedSchool, setSelectedSchoolState] = useState<School | null>(getStoredSchool);
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
   // Mutex para impedir execução paralela de loadUserData
   const loadingUserData = useRef(false);
@@ -216,6 +218,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [validateSelectedSchool, schools]);
 
+  // Refresh manual de sessão com circuit breaker para evitar tempestade de erros
+  const refreshFailCount = useRef(0);
+  const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const doRefreshSession = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) {
+        if (error.message?.toLowerCase().includes('network') || error.message?.toLowerCase().includes('fetch') || error.message?.toLowerCase().includes('resolve')) {
+          refreshFailCount.current += 1;
+          if (refreshFailCount.current >= 3) {
+            if (refreshTimer.current) clearInterval(refreshTimer.current);
+            setNetworkError('Servidor de autenticação inacessível. Verifique sua rede ou bloqueios corporativos.');
+          }
+        }
+      } else if (data.session) {
+        refreshFailCount.current = 0;
+        setNetworkError(null);
+        setSession(data.session);
+        setUser(data.session.user);
+      }
+    } catch {
+      refreshFailCount.current += 1;
+      if (refreshFailCount.current >= 3) {
+        if (refreshTimer.current) clearInterval(refreshTimer.current);
+        setNetworkError('Servidor de autenticação inacessível. Verifique sua rede ou bloqueios corporativos.');
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -263,6 +295,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSelectedSchoolState(null);
         setDataLoaded(false);
         dataLoadedRef.current = false;
+        setNetworkError(null);
+        refreshFailCount.current = 0;
+        if (refreshTimer.current) {
+          clearInterval(refreshTimer.current);
+          refreshTimer.current = null;
+        }
         localStorage.removeItem(SCHOOL_STORAGE_KEY);
         return;
       }
@@ -271,6 +309,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (s?.user) {
         setSession(s);
         setUser(s.user);
+        // Iniciar refresh manual periódico se ainda não rodando
+        if (!refreshTimer.current) {
+          refreshTimer.current = setInterval(() => {
+            if (mounted) void doRefreshSession();
+          }, 5 * 60 * 1000); // 5 minutos
+        }
         // Pular loadUserData se já carregou (evita duplicata no invite flow)
         if (event === "SIGNED_IN" && !dataLoadedRef.current) {
           await loadUserData(s.user.id);
@@ -281,6 +325,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       mounted = false;
       clearTimeout(safetyTimer);
+      if (refreshTimer.current) {
+        clearInterval(refreshTimer.current);
+        refreshTimer.current = null;
+      }
       subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -357,7 +405,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user, session, loading, dataLoaded, tenantId, isSuperadmin, schools, schoolsLoaded, selectedSchool,
-        setSelectedSchool, signIn, signOut, createSchool, refreshSchools: fetchSchools,
+        setSelectedSchool, signIn, signOut, createSchool, refreshSchools: async () => { await fetchSchools(); },
+        networkError,
       }}
     >
       {children}

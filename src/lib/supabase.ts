@@ -85,7 +85,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'musicfinance-auth',
     persistSession: true,
-    autoRefreshToken: true,
+    autoRefreshToken: false,
     detectSessionInUrl: true,
     // App é single-tab — desabilitar navigator.locks em TODOS os ambientes.
     // O lock padrão do Supabase (5s timeout) trava a inicialização quando há
